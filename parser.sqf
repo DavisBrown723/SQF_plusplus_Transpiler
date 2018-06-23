@@ -12,10 +12,12 @@
 #define ACCEPT_SYM(char)    if ((CURR_TOKEN select 1) == char) then {true} else {false}
 #define ACCEPT_TYPE(char)   if ((CURR_TOKEN select 0) == char) then {true} else {false}
 
-#define EXPECT_SYM(char)    if (ACCEPT_SYM(char)) then {true} else { breakto "ast_generation"; false }
-#define EXPECT_TYPE(char)   if (ACCEPT_TYPE(char)) then {true} else { breakto "ast_generation"; false }
+#define EXPECT_SYM(char)    if (ACCEPT_SYM(char)) then {true} else { breakto "ast_generation" }
+#define EXPECT_TYPE(char)   if (ACCEPT_TYPE(char)) then {true} else { breakto "ast_generation" }
 
 
+// we use way too much breakto/breakout right now
+// save it for the refactor
 
 parserCreate = {
     params ["_source"];
@@ -44,31 +46,24 @@ parserCreate = {
 
 
 /*
-    Grammar (wip)
+    "Grammar" (wip)
 
-    Block : Statement[]
+    () = optional
+    {} = repeating sequence until pattern broken
+    -> = next token
+     | = alternative sequence
+    --------------------------------
 
-    Definition : var -> identifier -> ;
-    Initialization var -> identifier -> = -> expression -> ;
-    Assignment : identifier -> = -> expression
-
-    UnaryOperation : operator -> expression
-    BinariyOperation : expression -> operator -> expression
-
+    arrayLiteral: [ -> {expression -> (,)} -> ]
     literal : number | string | bool | array
-    expression = literal | identifier | unary | binary | function call | expression
-    statement: definition | initialization | assignment | function call | binary expression
+    unaryOperation : operator -> expression
+    binaryOperation : expression -> operator -> expression
 
+    expression = literal | unary | binary | function call | identifier | expression
+    assignment : (var) identifier -> ; | = -> expression
 
-
-    var _x;
-    var _x = 5;
-    _x = 10;
-
-    nular();
-    unary(arg1);
-    binary(arg1,arg2);
-    func(arg1,arg2,arg3,...);
+    statement: assignment | expression
+    block: [statement,statement,...]
 */
 
 
@@ -107,18 +102,23 @@ literalNode = {
 UnaryOperationNode = {
     params ["_operator","_right"];
 
-    [_operator,_right]
+    ["unary",_operator,_right]
 };
 
 // [operator,left Expression,right Expression]
 BinaryOperationNode = {
     params ["_operator","_left","_right"];
 
-    [_operator,_left,_right]
+    ["binary",_operator,_left,_right]
 };
 
 parseLiteral = {
     scopename "parseLiteral";
+
+    if (ACCEPT_SYM("(")) then {
+        NEXT_SYM();
+        _inParenthesis = true;
+    };
 
     if (ACCEPT_TYPE("number_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
@@ -141,22 +141,62 @@ parseLiteral = {
     // #TODO: Arrays : [ -> expression (--> , --> expression) --> ]
 };
 
-/*
-parseExpression = {
-    parseBinaryOperation
-    parseUnaryOperation
-    parseFunctionCall
-    parseConditionalExpression
+parseUnaryOperation = {
+    scopename "parseUnaryOperation";
+
+    if (ACCEPT_TYPE("operator") && {(CURR_TOKEN select 1) in unaryOperators}) then {
+        private _operator = CURR_TOKEN select 1;
+        NEXT_SYM();
+
+        private _expressionNode = call parseExpression;
+        if (!isnil "_expressionNode") then {
+            private _unaryNode = [_operator,_expressionNode] call UnaryOperationNode;
+            _unaryNode breakout "parseUnaryOperation";
+        } else {
+            hint "ERROR";
+        };
+    };
 };
-*/
+
+parseBinaryOperation = {
+    // parse left expression
+    // expect binary operator
+    // parse right expression
+
+
+    // how do we respect operator precedence?
+
+    // how do we backtrack the first expression
+    // if no binary operator is found in the middle?
+};
 
 parseExpression = {
     scopename "parseExpression";
 
     private "_node";
 
+    private _inParenthesis = false;
+
+    if (ACCEPT_SYM("(")) then {
+        NEXT_SYM();
+        _inParenthesis = true;
+    };
+
+
+    _node = call parseUnaryOperation;
+    if (!isnil "_node") then {_node breakout "parseExpression"};
+
     _node = call parseLiteral;
-    if (isnil "_node") then {_node breakout "parseExpression"};
+    if (!isnil "_node") then {_node breakout "parseExpression"};
+
+
+    if (_inParenthesis) then {
+        if (EXPECT_SYM(")")) then {
+            NEXT_SYM();
+        } else {
+            hint "ERROR: Missing )";
+        };
+    };
 };
 
 parseAssignment = {
@@ -167,14 +207,13 @@ parseAssignment = {
         NEXT_SYM();
     };
 
-    if (EXPECT_TYPE("identifier")) then {
+    if (ACCEPT_TYPE("identifier")) then {
         private _identifier = CURR_TOKEN select 1;
         NEXT_SYM();
 
         if (ACCEPT_SYM(";")) then {
             // declaration
 
-            //[_identifier] call ;
             _ast pushback ([_keywords,"",_identifier,"__PARSER_DEFINITION"] call AssignmentNode);
             breakout "parseStatement";
         };
@@ -200,7 +239,10 @@ parseAssignment = {
             hint "ERROR: Expected variable assignment";
         };
     } else {
-        hint "ERROR: Expected Identifier";
+        if !(_keywords isequalto []) then {
+            hint "ERROR: Expected Identifier";
+            breakout "ast_generation";
+        };
     };
 };
 
@@ -208,6 +250,5 @@ parseStatement = {
     scopename "parseStatement";
 
     call parseAssignment;
-    //call parseFunctionCall;
-    //call parseBinaryExparession
+    call parseExpression;
 };
