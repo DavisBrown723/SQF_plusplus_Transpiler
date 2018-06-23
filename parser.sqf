@@ -5,7 +5,7 @@
 #define ADVANCE()           _tokenPointer = _tokenPointer + 1
 #define REGRESS()           _tokenPointer = _tokenPointer - 1
 
-#define NEXT_SYM()          CURR_TOKEN = _tokens select _tokenPointer; ADVANCE()
+#define NEXT_SYM()          if (_tokenPointer < _tokenCount) then {CURR_TOKEN = _tokens select _tokenPointer}; ADVANCE()
 
 #define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer
 
@@ -31,40 +31,19 @@ parserCreate = {
     private _tokenPointer = 0;
 
     private _ast = [] call BlockNode;
-    ast = _ast;
+    ast = _ast; // #TODO: remove
 
     scopename "ast_generation";
     private __token = ["",""];
     private __prevToken = ["",""];
     while {_tokenPointer < _tokenCount} do {
         NEXT_SYM();
-        call parseStatement;
+        _ast pushback (call parseStatement);
     };
 
     [_ast]
 };
 
-
-/*
-    "Grammar" (wip)
-
-    () = optional
-    {} = repeating sequence until pattern broken
-    -> = next token
-     | = alternative sequence
-    --------------------------------
-
-    arrayLiteral: [ -> {expression -> (,)} -> ]
-    literal : number | string | bool | array
-    unaryOperation : operator -> expression
-    binaryOperation : expression -> operator -> expression
-
-    expression = literal | unary | binary | function call | identifier | expression
-    assignment : (var) identifier -> ; | = -> expression
-
-    statement: assignment | expression
-    block: [statement,statement,...]
-*/
 
 
 // Define Node Classes
@@ -90,6 +69,13 @@ AssignmentNode = {
     ["Assignment",_keywords,_operator,_left,_right]
 };
 
+// ["identifier", identifier]
+identifierNode = {
+    params ["_identifier"];
+
+    ["identifier", _identifier]
+};
+
 // ["literal",literal token]
 literalNode = {
     params ["_literalToken"];
@@ -112,6 +98,41 @@ BinaryOperationNode = {
     ["binary",_operator,_left,_right]
 };
 
+
+
+/*
+    "Grammar" (wip)
+
+    () = optional
+    {} = repeating sequence until pattern broken
+    -> = next token
+     | = alternative sequence
+    --------------------------------
+
+    arrayLiteral: [ -> {expression -> (,)} -> ]
+    literal : number | string | bool | array
+    unaryOperation : operator -> expression
+    binaryOperation : expression -> operator -> expression
+
+    expression = literal | unary | binary | function call | identifier | expression
+    assignment : (var) identifier -> ; | = -> expression
+
+    statement: assignment | expression
+    block: [statement,statement,...]
+*/
+
+// Parse Methods
+
+parseIdentifier = {
+    scopename "parseIdentifier";
+
+    if (ACCEPT_TYPE("identifier")) then {
+        private _identifierNode = [CURR_TOKEN] call identifierNode;
+        NEXT_SYM();
+        _identifierNode breakout "parseIdentifier";
+    };
+};
+
 parseLiteral = {
     scopename "parseLiteral";
 
@@ -123,19 +144,19 @@ parseLiteral = {
     if (ACCEPT_TYPE("number_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
         NEXT_SYM();
-        _literalNode breakout "parseExpression";
+        _literalNode breakout "parseLiteral";
     };
 
     if (ACCEPT_TYPE("string_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
         NEXT_SYM();
-        _literalNode breakout "parseExpression";
+        _literalNode breakout "parseLiteral";
     };
 
     if (ACCEPT_TYPE("bool_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
         NEXT_SYM();
-        _literalNode breakout "parseExpression";
+        _literalNode breakout "parseLiteral";
     };
 
     // #TODO: Arrays : [ -> expression (--> , --> expression) --> ]
@@ -158,45 +179,65 @@ parseUnaryOperation = {
     };
 };
 
-parseBinaryOperation = {
-    // parse left expression
-    // expect binary operator
-    // parse right expression
-
-
-    // how do we respect operator precedence?
-
-    // how do we backtrack the first expression
-    // if no binary operator is found in the middle?
-};
-
-parseExpression = {
-    scopename "parseExpression";
-
+parseAtom = {
     private "_node";
 
-    private _inParenthesis = false;
+    scopename "parseAtom";
 
     if (ACCEPT_SYM("(")) then {
         NEXT_SYM();
-        _inParenthesis = true;
-    };
+        _node = 1 call parseExpression;
 
-
-    _node = call parseUnaryOperation;
-    if (!isnil "_node") then {_node breakout "parseExpression"};
-
-    _node = call parseLiteral;
-    if (!isnil "_node") then {_node breakout "parseExpression"};
-
-
-    if (_inParenthesis) then {
         if (EXPECT_SYM(")")) then {
-            NEXT_SYM();
+            if (!isnil "_node") then {
+                NEXT_SYM();
+                _node breakout "parseAtom";
+            } else {
+                hint "ERROR: Invalid expression";
+            };
         } else {
             hint "ERROR: Missing )";
         };
     };
+
+    _node = call parseLiteral;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseIdentifier;
+    if (!isnil "_node") exitwith {_node};
+};
+
+// Use precedence climbing to obey operator precedence and associativity
+// https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing/
+
+parseExpression = {
+    private _minPrecedence = _this;
+
+    scopename "parseExpression";
+
+    private _atomLHS = call parseAtom;
+
+    while {
+        !isnil "__token" &&
+        { ((CURR_TOKEN select 1) in binaryOperators) } &&
+        { ((CURR_TOKEN select 1) call getOperatorPrecedence) >= _minPrecedence }
+    } do {
+        private _currSymbol = CURR_TOKEN select 1;
+        private _opPrecedence = _currSymbol call getOperatorPrecedence;
+        private _opAssociativity = _currSymbol call getOperatorAssociativity;
+
+        private _nextMinPrecedence = _opPrecedence;
+        if (_opAssociativity == "left") then {
+            _nextMinPrecedence = _opPrecedence + 1;
+        };
+
+        NEXT_SYM();
+        private _atomRHS = _nextMinPrecedence call parseExpression;
+
+        _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call BinaryOperationNode;
+    };
+
+    _atomLHS
 };
 
 parseAssignment = {
@@ -249,6 +290,9 @@ parseAssignment = {
 parseStatement = {
     scopename "parseStatement";
 
-    call parseAssignment;
-    call parseExpression;
+    private "_node";
+
+    //call parseAssignment;
+    _node = 1 call parseExpression;
+    if (!isnil "_node") then { _node breakout "parseStatement" };
 };

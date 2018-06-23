@@ -12,8 +12,10 @@ digits = ["0","1","2","3","4","5","6","7","8","9"];
 separators = [ ",", "." , "(" , ")" , "[", "]", "{" , "}" ];
 
 singleCharOperators = [ "=" , "!" , "+" , "-" , "*" , "/" , "%" , ">" , "<" ];
-doubleCharOperator = ["<=",">=","==","!=","&&","||"];
+doubleCharOperators = ["<=",">=","==","!=","&&","||"];
+
 unaryOperators = ["!"];
+binaryOperators = singleCharOperators + doubleCharOperators - unaryOperators;
 
 identifierStartChars = letters + ["_"];
 identifierChars = identifierStartChars + digits;
@@ -30,6 +32,38 @@ arrayEndChar = "]";
 endline = endl select [1,1];
 whitespace = [" "];
 semicolon = ";";
+
+
+operatorInfoMap = [
+    [".",  6,"left"],
+
+    ["*",  5,"left"],
+    ["/",  5,"left"],
+    ["%",  5,"left"],
+
+    ["+",  4,"left"],
+    ["-",  4,"left"],
+
+    ["<",  3,"left"],
+    [">",  3,"left"],
+    ["<=", 3,"left"],
+    [">=", 3,"left"],
+
+    ["==", 2,"left"],
+
+    ["&&", 1,"left"],
+    ["||", 1,"left"]
+];
+
+getOperatorPrecedence = {
+    private _opIndex = operatorInfoMap findif {(_x select 0) == _this};
+    (operatorInfoMap select _opIndex) select 1
+};
+
+getOperatorAssociativity = {
+    private _opIndex = operatorInfoMap findif {(_x select 0) == _this};
+    (operatorInfoMap select _opIndex) select 2
+};
 
 // parser
 
@@ -180,7 +214,8 @@ lexerNext = {
     };
 
     private _symbol = _char1 + _char2;
-    if (_symbol in doubleCharOperator) then {
+    if (_symbol in doubleCharOperators) then {
+        _scanner call scannerNext;
         ["operator", _symbol, _currLine] breakout "token_categorization";
     };
 
