@@ -2,17 +2,19 @@
 
 #define CURR_TOKEN          __token
 
-#define ADVANCE()           _tokenPointer = _tokenPointer + 1
-#define REGRESS()           _tokenPointer = _tokenPointer - 2
+#define ADVANCE()           _tokenPointer = _tokenPointer + 1;
+#define REGRESS()           _tokenPointer = (_tokenPointer - 1) max 0;
 
-#define NEXT_SYM()          if (_tokenPointer < _tokenCount) then {CURR_TOKEN = _tokens select _tokenPointer}; ADVANCE()
-#define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer; ADVANCE()
+#define TOKENS_LEFT()       (_tokenPointer < _tokenCount - 1)
 
-#define ACCEPT_SYM(char)    ((CURR_TOKEN select 1) == char)
-#define ACCEPT_TYPE(char)   ((CURR_TOKEN select 0) == char)
+#define NEXT_SYM()          ADVANCE(); CURR_TOKEN = _tokens select _tokenPointer;
+#define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer;
 
-#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char)) then {true} else { breakto "ast_generation" })
-#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { breakto "ast_generation" })
+#define ACCEPT_SYM(char)    (!isnil "__token" && {(CURR_TOKEN select 1) == char})
+#define ACCEPT_TYPE(char)   (!isnil "__token" && {(CURR_TOKEN select 0) == char})
+
+#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
+#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
 
 
 // Refactor priorities
@@ -25,20 +27,25 @@ parserCreate = {
     private _lexer = [_source] call lexerCreate;
     private _tokens = (_lexer select 1) select { !((_x select 0) in ["whitespace","end_line"]) };
 
+    tokens = _tokens; // #TODO: remove
+
     // generate AST
 
     private _tokenCount = count _tokens;
-    private _tokenPointer = 0;
+    private _tokenPointer = -1; // will be incremented by first NEXT_SYM() call
 
     private _ast = [] call BlockNode;
     ast = _ast; // #TODO: remove
 
-    scopename "ast_generation";
-    private __token = ["",""];
-    private __prevToken = ["",""];
-    while {_tokenPointer < _tokenCount} do {
-        NEXT_SYM();
-        _ast pushback (call parseStatement);
+    if (_tokenCount > 0) then {
+
+        scopename "ast_generation";
+        private "__token";
+        while {_tokenPointer < _tokenCount} do {
+            NEXT_SYM();
+            _ast pushback (call parseStatement);
+        };
+
     };
 
     [_ast]
@@ -176,10 +183,6 @@ parseFunctionCall = {
 
             // confirmed function call
 
-            // func()
-            // func(1)
-            // func(1,2,3,4)
-
             private _argExpressions = [];
 
             // handle zero arg functions
@@ -216,6 +219,7 @@ parseFunctionCall = {
             _node breakout "parseFunctionCall";
         } else {
             BACKTRACK();
+            breakout "parseFunctionCall"
         };
     };
 };
@@ -367,9 +371,9 @@ parseAssignment = {
 parseStatement = {
     private "_node";
 
-    _node = call parseAssignment;
-    if (!isnil "_node") exitwith {_node};
+    //_node = call parseAssignment;
+    //if (!isnil "_node") exitwith {_node};
 
     _node = 1 call parseExpression;
-    if (!isnil "_node") then {_node};
+    if (!isnil "_node") exitwith {_node};
 };
