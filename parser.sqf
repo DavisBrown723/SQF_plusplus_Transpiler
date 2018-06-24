@@ -3,21 +3,21 @@
 #define CURR_TOKEN          __token
 
 #define ADVANCE()           _tokenPointer = _tokenPointer + 1
-#define REGRESS()           _tokenPointer = _tokenPointer - 1
+#define REGRESS()           _tokenPointer = _tokenPointer - 2
 
 #define NEXT_SYM()          if (_tokenPointer < _tokenCount) then {CURR_TOKEN = _tokens select _tokenPointer}; ADVANCE()
+#define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer; ADVANCE()
 
-#define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer
+#define ACCEPT_SYM(char)    ((CURR_TOKEN select 1) == char)
+#define ACCEPT_TYPE(char)   ((CURR_TOKEN select 0) == char)
 
-#define ACCEPT_SYM(char)    if ((CURR_TOKEN select 1) == char) then {true} else {false}
-#define ACCEPT_TYPE(char)   if ((CURR_TOKEN select 0) == char) then {true} else {false}
-
-#define EXPECT_SYM(char)    if (ACCEPT_SYM(char)) then {true} else { breakto "ast_generation" }
-#define EXPECT_TYPE(char)   if (ACCEPT_TYPE(char)) then {true} else { breakto "ast_generation" }
+#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char)) then {true} else { breakto "ast_generation" })
+#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { breakto "ast_generation" })
 
 
+// Refactor priorities
 // we use way too much breakto/breakout right now
-// save it for the refactor
+// proper error handling and feedback
 
 parserCreate = {
     params ["_source"];
@@ -63,7 +63,7 @@ BlockNode = {
 };
 
 // [keywords,operator,identifier,expression node]
-AssignmentNode = {
+assignmentNode = {
     params ["_keywords","_operator","_left","_right"];
 
     ["Assignment",_keywords,_operator,_left,_right]
@@ -73,29 +73,36 @@ AssignmentNode = {
 identifierNode = {
     params ["_identifier"];
 
-    ["identifier", _identifier]
+    ["identifier", _identifier select 1]
 };
 
 // ["literal",literal token]
 literalNode = {
     params ["_literalToken"];
 
-    ["literal", _literalToken select [0,2]]
+    ["literal", _literalToken select 1]
 };
 
 
 // [operator,right]
-UnaryOperationNode = {
+unaryOperationNode = {
     params ["_operator","_right"];
 
     ["unary",_operator,_right]
 };
 
 // [operator,left Expression,right Expression]
-BinaryOperationNode = {
+binaryOperationNode = {
     params ["_operator","_left","_right"];
 
     ["binary",_operator,_left,_right]
+};
+
+// [identifier,arguments]
+functionCallNode = {
+    params ["_function","_arguments"];
+
+    ["function_call", _function, _arguments]
 };
 
 
@@ -136,11 +143,6 @@ parseIdentifier = {
 parseLiteral = {
     scopename "parseLiteral";
 
-    if (ACCEPT_SYM("(")) then {
-        NEXT_SYM();
-        _inParenthesis = true;
-    };
-
     if (ACCEPT_TYPE("number_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
         NEXT_SYM();
@@ -159,7 +161,63 @@ parseLiteral = {
         _literalNode breakout "parseLiteral";
     };
 
-    // #TODO: Arrays : [ -> expression (--> , --> expression) --> ]
+    // #TODO: Arrays
+};
+
+parseFunctionCall = {
+    scopename "parseFunctionCall";
+
+    if (ACCEPT_TYPE("identifier")) then {
+        private _identifier = CURR_TOKEN select 1;
+        NEXT_SYM();
+
+        if (ACCEPT_SYM("(")) then {
+            NEXT_SYM();
+
+            // confirmed function call
+
+            // func()
+            // func(1)
+            // func(1,2,3,4)
+
+            private _argExpressions = [];
+
+            // handle zero arg functions
+            if (!ACCEPT_SYM(")")) then {
+                private _argsLeft = true;
+
+                while {_argsLeft} do {
+                    _argsLeft = false;
+
+                    if (ACCEPT_SYM(")")) then {
+                        hint "ERROR: Trailing comma";
+                        breakto "ast_generation";
+                    };
+
+                    private _expressionNode = 1 call parseExpression;
+                    _argExpressions pushback _expressionNode;
+
+                    //if (ACCEPT_SYM(",")) then {
+                    if ((CURR_TOKEN select 1) == ",") then {
+                        NEXT_SYM();
+                        _argsLeft = true;
+                    };
+                };
+            };
+
+            if (EXPECT_SYM(")")) then {
+                NEXT_SYM();
+            } else {
+                hint "ERROR: Missing )";
+                breakto "ast_generation";
+            };
+
+            private _node = [_identifier,_argExpressions] call functionCallNode;
+            _node breakout "parseFunctionCall";
+        } else {
+            BACKTRACK();
+        };
+    };
 };
 
 parseUnaryOperation = {
@@ -171,7 +229,7 @@ parseUnaryOperation = {
 
         private _expressionNode = call parseExpression;
         if (!isnil "_expressionNode") then {
-            private _unaryNode = [_operator,_expressionNode] call UnaryOperationNode;
+            private _unaryNode = [_operator,_expressionNode] call unaryOperationNode;
             _unaryNode breakout "parseUnaryOperation";
         } else {
             hint "ERROR";
@@ -203,7 +261,13 @@ parseAtom = {
     _node = call parseLiteral;
     if (!isnil "_node") exitwith {_node};
 
+    _node = call parseFunctionCall;
+    if (!isnil "_node") exitwith {_node};
+
     _node = call parseIdentifier;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseUnaryOperation;
     if (!isnil "_node") exitwith {_node};
 };
 
@@ -234,13 +298,17 @@ parseExpression = {
         NEXT_SYM();
         private _atomRHS = _nextMinPrecedence call parseExpression;
 
-        _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call BinaryOperationNode;
+        _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call binaryOperationNode;
     };
 
     _atomLHS
 };
 
 parseAssignment = {
+    scopename "parseAssignment";
+
+    private "_node";
+
     private _keywords = [];
 
     if (ACCEPT_SYM("var")) then {
@@ -252,32 +320,41 @@ parseAssignment = {
         private _identifier = CURR_TOKEN select 1;
         NEXT_SYM();
 
+        private _handled = false;
+
         if (ACCEPT_SYM(";")) then {
             // declaration
 
-            _ast pushback ([_keywords,"",_identifier,"__PARSER_DEFINITION"] call AssignmentNode);
-            breakout "parseStatement";
+            _handled = true;
+
+            _node = [_keywords,"",_identifier,"__PARSER_DEFINITION"] call assignmentNode;
+            _node breakout "parseAssignment";
         };
 
-        if (EXPECT_SYM("=")) then {
+        if (ACCEPT_SYM("=")) then {
             // initialization
+
+            _handled = true;
 
             NEXT_SYM();
 
-            private _expressionNode = call parseExpression;
-            _ast pushback ([_keywords,"=",_identifier,_expressionNode] call AssignmentNode);
+            private _expressionNode = 1 call parseExpression;
+            _node = [_keywords,"=",_identifier,_expressionNode] call assignmentNode;
 
-            if !(EXPECT_SYM(";")) then {
+            if (!EXPECT_SYM(";")) then {
                 hint "ERROR: Missing ;";
             };
-            breakout "parseStatement";
+
+            _node breakout "parseAssignment";
         };
 
-        if (_keywords isequalto []) then {
+        if (!_handled) then {
             // not an assignment
             BACKTRACK();
-        } else {
-            hint "ERROR: Expected variable assignment";
+
+            if !(_keywords isequalto []) then {
+                hint "ERROR: Expected variable assignment";
+            };
         };
     } else {
         if !(_keywords isequalto []) then {
@@ -288,11 +365,11 @@ parseAssignment = {
 };
 
 parseStatement = {
-    scopename "parseStatement";
-
     private "_node";
 
-    //call parseAssignment;
+    _node = call parseAssignment;
+    if (!isnil "_node") exitwith {_node};
+
     _node = 1 call parseExpression;
-    if (!isnil "_node") then { _node breakout "parseStatement" };
+    if (!isnil "_node") then {_node};
 };
