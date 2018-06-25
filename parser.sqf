@@ -49,7 +49,7 @@ parserCreate = {
 
     };
 
-    _ast = _ast call BlockNode;
+    _ast = [_ast] call BlockNode;
     ast = _ast; // #TODO: remove
 
     [_ast]
@@ -57,59 +57,70 @@ parserCreate = {
 
 
 
+
+
 // Define Node Classes
 
-// [condition,true BlockNode,false BlockNode]
 ITENode = {
     params ["_condition","_trueBlock","_falseBlock"];
 
     ["if",_condition,_trueBlock,_falseBlock]
 };
 
-// [statementnode array]
+WhileNode = {
+    params ["_condition","_block"];
+
+    ["while",_condition,_block]
+};
+
+ForNode = {
+    params ["_pre","_condition","_post","_block"];
+
+    ["for",_pre,_condition,_post,_block]
+};
+
+ForeachNode = {
+    params ["_list","_enumerationVar","_block"];
+
+    ["foreach",_list,_enumerationVar,_block]
+};
+
 BlockNode = {
     params [["_statementList",[]]];
 
     ["block", _statementList];
 };
 
-// [keywords,operator,identifier,expression node]
 assignmentNode = {
     params ["_keywords","_operator","_left","_right"];
 
     ["Assignment",_keywords,_operator,_left,_right]
 };
 
-// ["identifier", identifier]
 identifierNode = {
     params ["_identifier"];
 
     ["identifier", _identifier select 1]
 };
 
-// ["literal",literal token]
 literalNode = {
     params ["_literalToken"];
 
     ["literal", _literalToken select 1]
 };
 
-
-// [operator,right]
 unaryOperationNode = {
     params ["_operator","_right"];
 
     ["unary",_operator,_right]
 };
 
-// [operator,left Expression,right Expression]
 binaryOperationNode = {
     params ["_operator","_left","_right"];
 
     ["binary",_operator,_left,_right]
 };
 
-// [identifier,arguments]
 functionCallNode = {
     params ["_function","_arguments"];
 
@@ -118,26 +129,7 @@ functionCallNode = {
 
 
 
-/*
-    "Grammar" (wip)
 
-    () = optional
-    {} = repeating sequence until pattern broken
-    -> = next token
-     | = alternative sequence
-    --------------------------------
-
-    arrayLiteral: [ -> {expression -> (,)} -> ]
-    literal : number | string | bool | array
-    unaryOperation : operator -> expression
-    binaryOperation : expression -> operator -> expression
-
-    expression = literal | unary | binary | function call | identifier | expression
-    assignment : (var) identifier -> ; | = -> expression
-
-    statement: assignment | expression
-    block: [statement,statement,...]
-*/
 
 // Parse Methods
 
@@ -421,12 +413,13 @@ parseBlock = {
 
         NEXT_SYM();
 
-        private _node = _statements call BlockNode;
+        private _node = [_statements] call BlockNode;
         _node breakout "parseBlock";
     };
 };
 
 // if (condition) {true block} else {false block}
+// if (condition) statement; else statement;
 parseIfStatement = {
     scopename "parseIfStatement";
 
@@ -440,40 +433,128 @@ parseIfStatement = {
             if (EXPECT_SYM(")")) then {
                 NEXT_SYM();
 
+                private _trueBlock = [];
+                private _falseBlock = [];
+
+                // parse true block
+
                 if (ACCEPT_SYM("{")) then {
-                    // 2 blocks
-
-                    private _trueBlock = call parseBlock;
-
-                    if (ACCEPT_SYM("else")) then {
-                        NEXT_SYM();
-
-                        private _falseBLock = call parseBlock;
-
-                        private _node = [_conditionExpression,_trueBlock,_falseBLock] call ITENode;
-                        _node breakout "parseIfStatement";
-                    };
-
-                    private _node = [_conditionExpression,_trueBlock,[]] call ITENode;
-                    _node breakout "parseIfStatement";
+                    _trueBlock = call parseBlock;
                 } else {
-                    // 2 single statements
-
                     private _statement = call parseStatement;
-                    private _trueBlock = [_statement] call BlockNode;
+                    _trueBlock = [[_statement]] call BlockNode;
+                };
 
-                    if (ACCEPT_SYM("else")) then {
-                        NEXT_SYM();
+                // parse false block
 
+                if (ACCEPT_SYM("else")) then {
+                    NEXT_SYM();
+
+                    if (ACCEPT_SYM("{")) then {
+                        _falseBlock = call parseBlock;
+                    } else {
                         private _statement = call parseStatement;
-                        private _falseBlock = [_statement] call BlockNode;
+                        _falseBlock = [[_statement]] call BlockNode;
+                    };
+                };
 
-                        private _node = [_conditionExpression,_trueBlock,_falseBlock] call ITENode;
-                        _node breakout "parseIfStatement";
+                _node = [_conditionExpression,_trueBlock,_falseBLock] call ITENode;
+                _node breakout "parseIfStatement";
+            };
+        };
+    };
+};
+
+parseWhileStatement = {
+    scopename "parseWhileStatement";
+
+    if (ACCEPT_SYM("while")) then {
+        NEXT_SYM();
+
+        if (EXPECT_SYM("(")) then {
+            NEXT_SYM();
+            private _conditionExpression = 1 call parseExpression;
+
+            if (EXPECT_SYM(")")) then {
+                NEXT_SYM();
+
+                private _block = [];
+
+                if (ACCEPT_SYM("{")) then {
+                    _block = call parseBlock;
+                } else {
+                    private _statement = call parseStatement;
+                    _block = [[_statement]] call BlockNode;
+                };
+
+                _node = [_conditionExpression,_block] call WhileNode;
+                _node breakout "parseWhileStatement";
+            };
+        };
+    };
+};
+
+parseForStatement = {
+        scopename "parseForStatement";
+
+    if (ACCEPT_SYM("for")) then {
+        NEXT_SYM();
+
+        if (EXPECT_SYM("(")) then {
+            NEXT_SYM();
+
+            if (!ACCEPT_SYM("var")) then {
+                // for-loop
+                private _preStatement = call parseStatement;
+                private _conditionStatement = call parseStatement;
+                private _postStatement = call parseStatement;
+
+                if (EXPECT_SYM(")")) then {
+                    NEXT_SYM();
+
+                    private _block = [];
+
+                    if (ACCEPT_SYM("{")) then {
+                        _block = call parseBlock;
+                    } else {
+                        private _statement = call parseStatement;
+                        _block = [[_statement]] call BlockNode;
                     };
 
-                    private _node = [_conditionExpression,_trueBlock,[]] call ITENode;
-                    _node breakout "parseIfStatement";
+                    _node = [_preStatement,_conditionStatement,_postStatement,_block] call ForNode;
+                    _node breakout "parseForStatement";
+                };
+            } else {
+                // foreach
+
+                NEXT_SYM();
+
+                if (EXPECT_TYPE("identifier")) then {
+                    private _enumerationVar = CURR_TOKEN select 1;
+                    NEXT_SYM();
+
+                    if (EXPECT_SYM(":")) then {
+                        NEXT_SYM();
+
+                        private _list = 1 call parseExpression;
+
+                        if (EXPECT_SYM(")")) then {
+                            NEXT_SYM();
+
+                            private _block = [];
+
+                            if (ACCEPT_SYM("{")) then {
+                                _block = call parseBlock;
+                            } else {
+                                private _statement = call parseStatement;
+                                _block = [[_statement]] call BlockNode;
+                            };
+
+                            _node = [_list,_enumerationVar,_block] call ForeachNode;
+                            _node breakout "parseForStatement";
+                        };
+                    };
+
                 };
             };
         };
@@ -489,6 +570,18 @@ parseStatement = {
     _node = call parseIfStatement;
     if (!isnil "_node") exitwith {_node};
 
-    _node = 1 call parseExpression;
+    _node = call parseWhileStatement;
     if (!isnil "_node") exitwith {_node};
+
+    _node = call parseForStatement;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = 1 call parseExpression;
+    if (!isnil "_node") exitwith {
+        if (ACCEPT_SYM(";")) then {
+            NEXT_SYM();
+        };
+
+        _node
+    };
 };
