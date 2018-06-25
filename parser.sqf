@@ -94,19 +94,19 @@ BlockNode = {
 assignmentNode = {
     params ["_keywords","_operator","_left","_right"];
 
-    ["Assignment",_keywords,_operator,_left,_right]
+    ["assignment",_keywords,_operator,_left,_right]
 };
 
 identifierNode = {
-    params ["_identifier"];
+    params ["_identifierToken"];
 
-    ["identifier", _identifier select 1]
+    ["identifier", _identifierToken select [0,2]]
 };
 
 literalNode = {
     params ["_literalToken"];
 
-    ["literal", _literalToken select 1]
+    ["literal", _literalToken select [0,2]]
 };
 
 unaryOperationNode = {
@@ -352,7 +352,8 @@ parseAssignment = {
     };
 
     if (ACCEPT_TYPE("identifier")) then {
-        private _identifier = CURR_TOKEN select 1;
+        private _identifier = CURR_TOKEN;
+        private _identifierNode = [_identifier] call IdentifierNode;
         NEXT_SYM();
 
         private _handled = false;
@@ -362,7 +363,7 @@ parseAssignment = {
 
             _handled = true;
 
-            private _node = [_keywords,"",_identifier,"__PARSER_DEFINITION"] call assignmentNode;
+            private _node = [_keywords,"",_identifierNode,"__PARSER_DEFINITION"] call assignmentNode;
             _node breakout "parseAssignment";
         };
 
@@ -374,7 +375,7 @@ parseAssignment = {
             NEXT_SYM();
 
             private _expressionNode = 1 call parseExpression;
-            private _node = [_keywords,"=",_identifier,_expressionNode] call assignmentNode;
+            private _node = [_keywords,"=",_identifierNode,_expressionNode] call assignmentNode;
 
             if (EXPECT_SYM(";")) then {
                 NEXT_SYM();
@@ -584,4 +585,13 @@ parseStatement = {
 
         _node
     };
+
+    // SWITCH
+
+    // unnamed scope
+    //private _node = call parseBlock;
+    //if (!isnil "_node") exitwith {
+    //    _node set [0,"unnamed_scope"];
+    //    _node
+    //};
 };
