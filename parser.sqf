@@ -16,6 +16,8 @@
 #define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
 #define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
 
+// Wishlist
+// subscript operator : array[0][2];
 
 // Refactor priorities
 // we use way too much breakto/breakout right now
@@ -34,8 +36,7 @@ parserCreate = {
     private _tokenCount = count _tokens;
     private _tokenPointer = -1; // will be incremented by first NEXT_SYM() call
 
-    private _ast = [] call BlockNode;
-    ast = _ast; // #TODO: remove
+    private _ast = [];
 
     if (_tokenCount > 0) then {
 
@@ -48,6 +49,9 @@ parserCreate = {
 
     };
 
+    _ast = _ast call BlockNode;
+    ast = _ast; // #TODO: remove
+
     [_ast]
 };
 
@@ -59,14 +63,14 @@ parserCreate = {
 ITENode = {
     params ["_condition","_trueBlock","_falseBlock"];
 
-    [_condition,_trueBlock,_falseBlock]
+    ["if",_condition,_trueBlock,_falseBlock]
 };
 
 // [statementnode array]
 BlockNode = {
     params [["_statementList",[]]];
 
-    _statementList
+    ["block", _statementList];
 };
 
 // [keywords,operator,identifier,expression node]
@@ -168,7 +172,44 @@ parseLiteral = {
         _literalNode breakout "parseLiteral";
     };
 
-    // #TODO: Arrays
+    // parse array literal
+    if (ACCEPT_SYM("[")) then {
+        NEXT_SYM();
+
+        if (ACCEPT_SYM("]")) then {
+            private _literalNode = [["array_literal", []]] call literalNode;
+            _literalNode breakout "parseLiteral";
+        };
+
+        // we have elements
+
+        private _argExpressions = [];
+        private _argsLeft = true;
+
+        while {_argsLeft} do {
+            _argsLeft = false;
+
+            if (ACCEPT_SYM("]")) then {
+                hint "ERROR: Trailing comma";
+                breakto "ast_generation";
+            };
+
+            private _expressionNode = 1 call parseExpression;
+            _argExpressions pushback _expressionNode;
+
+            if ((CURR_TOKEN select 1) == ",") then {
+                NEXT_SYM();
+                _argsLeft = true;
+            };
+        };
+
+        if (EXPECT_SYM("]")) then {
+            NEXT_SYM();
+
+            private _literalNode = [["array_literal", _argExpressions]] call literalNode;
+            _literalNode breakout "parseLiteral";
+        };
+    };
 };
 
 parseFunctionCall = {
@@ -311,8 +352,6 @@ parseExpression = {
 parseAssignment = {
     scopename "parseAssignment";
 
-    private "_node";
-
     private _keywords = [];
 
     if (ACCEPT_SYM("var")) then {
@@ -331,7 +370,7 @@ parseAssignment = {
 
             _handled = true;
 
-            _node = [_keywords,"",_identifier,"__PARSER_DEFINITION"] call assignmentNode;
+            private _node = [_keywords,"",_identifier,"__PARSER_DEFINITION"] call assignmentNode;
             _node breakout "parseAssignment";
         };
 
@@ -343,13 +382,13 @@ parseAssignment = {
             NEXT_SYM();
 
             private _expressionNode = 1 call parseExpression;
-            _node = [_keywords,"=",_identifier,_expressionNode] call assignmentNode;
+            private _node = [_keywords,"=",_identifier,_expressionNode] call assignmentNode;
 
-            if (!EXPECT_SYM(";")) then {
-                hint "ERROR: Missing ;";
+            if (EXPECT_SYM(";")) then {
+                NEXT_SYM();
+
+                _node breakout "parseAssignment";
             };
-
-            _node breakout "parseAssignment";
         };
 
         if (!_handled) then {
@@ -368,11 +407,87 @@ parseAssignment = {
     };
 };
 
+parseBlock = {
+    scopename "parseBlock";
+
+    if (ACCEPT_SYM("{")) then {
+        NEXT_SYM();
+
+        private _statements = [];
+
+        while {!ACCEPT_SYM("}")} do {
+            _statements pushback (call parseStatement);
+        };
+
+        NEXT_SYM();
+
+        private _node = _statements call BlockNode;
+        _node breakout "parseBlock";
+    };
+};
+
+// if (condition) {true block} else {false block}
+parseIfStatement = {
+    scopename "parseIfStatement";
+
+    if (ACCEPT_SYM("if")) then {
+        NEXT_SYM();
+
+        if (EXPECT_SYM("(")) then {
+            NEXT_SYM();
+            private _conditionExpression = 1 call parseExpression;
+
+            if (EXPECT_SYM(")")) then {
+                NEXT_SYM();
+
+                if (ACCEPT_SYM("{")) then {
+                    // 2 blocks
+
+                    private _trueBlock = call parseBlock;
+
+                    if (ACCEPT_SYM("else")) then {
+                        NEXT_SYM();
+
+                        private _falseBLock = call parseBlock;
+
+                        private _node = [_conditionExpression,_trueBlock,_falseBLock] call ITENode;
+                        _node breakout "parseIfStatement";
+                    };
+
+                    private _node = [_conditionExpression,_trueBlock,[]] call ITENode;
+                    _node breakout "parseIfStatement";
+                } else {
+                    // 2 single statements
+
+                    private _statement = call parseStatement;
+                    private _trueBlock = [_statement] call BlockNode;
+
+                    if (ACCEPT_SYM("else")) then {
+                        NEXT_SYM();
+
+                        private _statement = call parseStatement;
+                        private _falseBlock = [_statement] call BlockNode;
+
+                        private _node = [_conditionExpression,_trueBlock,_falseBlock] call ITENode;
+                        _node breakout "parseIfStatement";
+                    };
+
+                    private _node = [_conditionExpression,_trueBlock,[]] call ITENode;
+                    _node breakout "parseIfStatement";
+                };
+            };
+        };
+    };
+};
+
 parseStatement = {
     private "_node";
 
-    //_node = call parseAssignment;
-    //if (!isnil "_node") exitwith {_node};
+    _node = call parseAssignment;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseIfStatement;
+    if (!isnil "_node") exitwith {_node};
 
     _node = 1 call parseExpression;
     if (!isnil "_node") exitwith {_node};
