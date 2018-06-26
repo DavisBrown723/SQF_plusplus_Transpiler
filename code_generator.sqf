@@ -151,6 +151,41 @@ translateNode = {
             _code breakout "translateNode";
         };
 
+        case "function_call": {
+            private _function = _node select 1;
+            private _arguments = _node select 2;
+
+            // determine if function is SQF command
+
+            private _nularIndex = (sqfCommands select 0) findif {_function == _x};
+            if (_nularIndex != -1) then {
+                private _code = _function;
+                _code breakout "translateNode";
+            };
+
+            private _unaryIndex = (sqfCommands select 1) findif {_function == _x};
+            if (_unaryIndex != -1) then {
+                private _arg = _arguments select 0;
+                private _code = format ["(%1 %2)", _function, _arg call translateNode];
+                _code breakout "translateNode";
+            };
+
+            private _binaryIndex = (sqfCommands select 2) findif {_function == _x};
+            if (_binaryIndex != -1) then {
+                _arguments params ["_argLeft","_argRight"];
+                private _code = format ["(%1 %2 %3)", _argLeft call translateNode, _function, _argRight call translateNode];
+                _code breakout "translateNode";
+            };
+
+            // function call
+
+            _arguments = _arguments apply {_x call translateNode};
+            _arguments = "[" + (_arguments joinstring ",") + "]";
+
+            private _code = format ["(%1 call %2)", _arguments, _function];
+            _code breakout "translateNode";
+        };
+
     };
 
     ""
