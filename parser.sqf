@@ -133,6 +133,11 @@ functionCallNode = {
     ["function_call", _function, _arguments]
 };
 
+lambdaNode = {
+    params ["_body"];
+
+    ["lambda", _body]
+};
 
 
 
@@ -263,6 +268,23 @@ parseFunctionCall = {
     };
 };
 
+parseLambda = {
+    scopename "parseLambda";
+
+    if (ACCEPT_TYPE("identifier")) then {
+        private _identifier = CURR_TOKEN select 1;
+
+        if (_identifier == "function") then {
+            NEXT_SYM();
+
+            private _body = call parseBlock;
+
+            private _node = [_body] call lambdaNode;
+            _node breakout "parseLambda"
+        };
+    };
+};
+
 parseUnaryOperation = {
     scopename "parseUnaryOperation";
 
@@ -305,6 +327,9 @@ parseAtom = {
     if (!isnil "_node") exitwith {_node};
 
     _node = call parseFunctionCall;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseLambda;
     if (!isnil "_node") exitwith {_node};
 
     _node = call parseIdentifier;
@@ -381,6 +406,7 @@ parseAssignment = {
             NEXT_SYM();
 
             private _expressionNode = 1 call parseExpression;
+            systemchat format ["Expression Assigned: %1", _expressionNode];
             private _node = [_keywords,"=",_identifierNode,_expressionNode] call assignmentNode;
 
             if (EXPECT_SYM(";")) then {
@@ -408,7 +434,6 @@ parseAssignment = {
 
 parseBlock = {
     scopename "parseBlock";
-
     if (ACCEPT_SYM("{")) then {
         NEXT_SYM();
 
@@ -418,10 +443,12 @@ parseBlock = {
             _statements pushback (call parseStatement);
         };
 
-        NEXT_SYM();
+        if (EXPECT_SYM("}")) then {
+            NEXT_SYM();
 
-        private _node = [_statements] call BlockNode;
-        _node breakout "parseBlock";
+            private _node = [_statements] call BlockNode;
+            _node breakout "parseBlock";
+        };
     };
 };
 
@@ -660,6 +687,13 @@ parseStatement = {
     _node = call parseSwitchStatement;
     if (!isnil "_node") exitwith {_node};
 
+    // unnamed scope
+    private _node = call parseBlock;
+    if (!isnil "_node") exitwith {
+        _node set [0,"unnamed_scope"];
+        _node
+    };
+
     _node = 1 call parseExpression;
     if (!isnil "_node") exitwith {
         if (ACCEPT_SYM(";")) then {
@@ -668,13 +702,4 @@ parseStatement = {
 
         _node
     };
-
-    // SWITCH
-
-    // unnamed scope
-    //private _node = call parseBlock;
-    //if (!isnil "_node") exitwith {
-    //    _node set [0,"unnamed_scope"];
-    //    _node
-    //};
 };

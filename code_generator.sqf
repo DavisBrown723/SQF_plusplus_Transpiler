@@ -186,6 +186,19 @@ translateNode = {
             _code breakout "translateNode";
         };
 
+        case "unnamed_scope": {
+            _node set [0,"block"];
+            private _code = "call {" + (_node call translateNode) + "};";
+            _code breakout "translateNode";
+        };
+
+        case "lambda": {
+            private _body = _node select 1;
+
+            private _code = "{" + (_body call translateNode) + "}";
+            _code breakout "translateNode";
+        };
+
     };
 
     ""
