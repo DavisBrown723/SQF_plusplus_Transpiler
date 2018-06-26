@@ -29,10 +29,12 @@ translateNode = {
             private _token = _node select 1;
             private _literal = _token select 1;
 
-            //if ((_token select 0) == "array_literal") then {
-            //    //private _code = _literal;
-            //    //_code breakout "translateNode";
-            //};
+            if ((_token select 0) == "array_literal") then {
+                private _elements = _literal apply {_x call translateNode};
+                private _code = "[" + (_elements joinstring ",") + "]";
+
+                _code breakout "translateNode";
+            };
 
             private _code = _literal;
             _code breakout "translateNode";
@@ -165,8 +167,10 @@ translateNode = {
 
             private _unaryIndex = (sqfCommands select 1) findif {_function == _x};
             if (_unaryIndex != -1) then {
-                private _arg = _arguments select 0;
-                private _code = format ["(%1 %2)", _function, _arg call translateNode];
+                _arguments = _arguments apply {_x call translateNode};
+                private _argString = "[" + (_arguments joinstring ",") + "]";
+
+                private _code = format ["(%1 %2)", _function, _argString];
                 _code breakout "translateNode";
             };
 
@@ -196,6 +200,14 @@ translateNode = {
             private _body = _node select 1;
 
             private _code = "{" + (_body call translateNode) + "}";
+            _code breakout "translateNode";
+        };
+
+        case "named_function": {
+            private _function = _node select 1;
+            private _body = _node select 2;
+
+            private _code = format ["%1 = {%2};", _function, _body call translateNode];
             _code breakout "translateNode";
         };
 

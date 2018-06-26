@@ -42,8 +42,8 @@ parserCreate = {
 
         scopename "ast_generation";
         private "__token";
+        NEXT_SYM();
         while {_tokenPointer < _tokenCount} do {
-            NEXT_SYM();
             _ast pushback (call parseStatement);
         };
 
@@ -137,6 +137,12 @@ lambdaNode = {
     params ["_body"];
 
     ["lambda", _body]
+};
+
+namedFunctionNode = {
+    params ["_identifier","_body"];
+
+    ["named_function",_identifier,_body]
 };
 
 
@@ -271,17 +277,12 @@ parseFunctionCall = {
 parseLambda = {
     scopename "parseLambda";
 
-    if (ACCEPT_TYPE("identifier")) then {
-        private _identifier = CURR_TOKEN select 1;
+    if (ACCEPT_TYPE("identifier") && { (CURR_TOKEN select 1) == "function"}) then {
+        NEXT_SYM();
 
-        if (_identifier == "function") then {
-            NEXT_SYM();
-
-            private _body = call parseBlock;
-
-            private _node = [_body] call lambdaNode;
-            _node breakout "parseLambda"
-        };
+        private _body = call parseBlock;
+        private _node = [_body] call lambdaNode;
+        _node breakout "parseLambda"
     };
 };
 
@@ -406,7 +407,6 @@ parseAssignment = {
             NEXT_SYM();
 
             private _expressionNode = 1 call parseExpression;
-            systemchat format ["Expression Assigned: %1", _expressionNode];
             private _node = [_keywords,"=",_identifierNode,_expressionNode] call assignmentNode;
 
             if (EXPECT_SYM(";")) then {
@@ -669,6 +669,28 @@ parseSwitchStatement = {
     };
 };
 
+parseNamedFunctionDefinition = {
+    scopename "parseNamedFunctionDefinition";
+
+    // namedFunctionNode
+
+    if (ACCEPT_SYM("function")) then {
+        NEXT_SYM();
+
+        if (ACCEPT_TYPE("identifier")) then {
+            private _identifier = CURR_TOKEN select 1;
+            NEXT_SYM();
+
+            private _body = call parseBlock;
+
+            private _functionNode = [_identifier,_body] call namedFunctionNode;
+            _functionNode breakout "parseNamedFunctionDefinition";
+        } else {
+            hint "ERROR: Function definition missing name"
+        };
+    };
+};
+
 parseStatement = {
     private "_node";
 
@@ -687,6 +709,11 @@ parseStatement = {
     _node = call parseSwitchStatement;
     if (!isnil "_node") exitwith {_node};
 
+    _node = call parseNamedFunctionDefinition;
+    if (!isnil "_node") exitwith {_node};
+
+    // function definition
+
     // unnamed scope
     private _node = call parseBlock;
     if (!isnil "_node") exitwith {
@@ -694,6 +721,8 @@ parseStatement = {
         _node
     };
 
+    // expressions such as function calls that make up an entire statement
+    // aren't generating semicolons to end the statement
     _node = 1 call parseExpression;
     if (!isnil "_node") exitwith {
         if (ACCEPT_SYM(";")) then {
