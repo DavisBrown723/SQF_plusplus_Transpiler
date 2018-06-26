@@ -2,7 +2,7 @@ translateNode = {
     private _node = _this;
 
     scopename "translateNode";
-systemchat format ["Node: %1", _node];
+
     switch (_node select 0) do {
 
         case "block": {
@@ -28,8 +28,6 @@ systemchat format ["Node: %1", _node];
         case "literal": {
             private _token = _node select 1;
             private _literal = _token select 1;
-
-            systemchat format ["Token: %1 \n\n Literal: %2", _token, _literal];
 
             //if ((_token select 0) == "array_literal") then {
             //    //private _code = _literal;
@@ -92,13 +90,65 @@ systemchat format ["Node: %1", _node];
             if !(_falseBlock isequalto []) then {
                 _code = _code + format [" else {%1}", _falseBlock call translateNode];
             };
+
+            _code breakout "translateNode";
         };
 
         case "while": {
             private _condition = _node select 1;
-            private _block = _node select 2;=
+            private _block = _node select 2;
 
-            private _code = format ["while (%1) do {%2}", _condition call translateNode, _block call translateNode];
+            private _code = format ["while {%1} do {%2}", _condition call translateNode, _block call translateNode];
+
+            _code breakout "translateNode";
+        };
+
+        case "for": {
+            private _pre = _node select 1;
+            private _condition = _node select 2;
+            private _post = _node select 3;
+            private _block = _node select 4;
+
+            private _code = format [
+                "%1;while {%2} do {%3%4};",
+                _pre call translateNode, _condition call translateNode, _block call translateNode, _post call translateNode
+            ];
+
+            _code breakout "translateNode";
+        };
+
+        case "foreach": {
+            private _list = _node select 1;
+            private _enumerableVar = _node select 2;
+            private _block = _node select 3;
+
+            private _code = format [
+                "{private %1 = _x;%2} foreach %3;",
+                _enumerableVar call translateNode, _block call translateNode, _list call translateNode
+            ];
+
+            _code breakout "translateNode";
+        };
+
+        case "switch": {
+            private _condition = _node select 1;
+            private _cases = _node select 2;
+
+            private _code = format ["switch (%1) do {", _condition call translateNode];
+
+            {
+                _x params ["_caseCondition","_caseBlock"];
+
+                if (_caseCondition isequalto []) then {
+                    _code = _code + (format ["default {%1};", _caseBlock call translateNode]);
+                } else {
+                    _code = _code + (format ["case %1: {%2};", _caseCondition call translateNode, _caseBlock call translateNode]);
+                };
+            } foreach _cases;
+
+            _code = _code + "};";
+
+            _code breakout "translateNode";
         };
 
     };

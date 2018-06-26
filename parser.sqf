@@ -13,8 +13,8 @@
 #define ACCEPT_SYM(char)    (!isnil "__token" && {(CURR_TOKEN select 1) == char})
 #define ACCEPT_TYPE(char)   (!isnil "__token" && {(CURR_TOKEN select 0) == char})
 
-#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
-#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint "EXPECT ERROR"; breakto "ast_generation" })
+#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint format ["EXPECT ERROR: %1", CURR_TOKEN]; breakto "ast_generation" })
+#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint format ["EXPECT ERROR: %1", CURR_TOKEN]; breakto "ast_generation" })
 
 // Wishlist
 // subscript operator : array[0][2];
@@ -83,6 +83,12 @@ ForeachNode = {
     params ["_list","_enumerationVar","_block"];
 
     ["foreach",_list,_enumerationVar,_block]
+};
+
+SwitchNode = {
+    params ["_condition","_cases"];
+
+    ["switch",_condition,_cases]
 };
 
 BlockNode = {
@@ -496,7 +502,7 @@ parseWhileStatement = {
 };
 
 parseForStatement = {
-        scopename "parseForStatement";
+    scopename "parseForStatement";
 
     if (ACCEPT_SYM("for")) then {
         NEXT_SYM();
@@ -504,7 +510,17 @@ parseForStatement = {
         if (EXPECT_SYM("(")) then {
             NEXT_SYM();
 
-            if (!ACCEPT_SYM("var")) then {
+            // peek ahead to see which type of for-loop we have
+            // for(;;;)
+            // for(var _e : _list)
+
+            NEXT_SYM();
+            NEXT_SYM();
+
+            if (!ACCEPT_SYM(":")) then {
+                BACKTRACK();
+                BACKTRACK();
+
                 // for-loop
                 private _preStatement = call parseStatement;
                 private _conditionStatement = call parseStatement;
@@ -527,35 +543,99 @@ parseForStatement = {
                 };
             } else {
                 // foreach
+                BACKTRACK();
+                BACKTRACK();
 
-                NEXT_SYM();
-
-                if (EXPECT_TYPE("identifier")) then {
-                    private _enumerationVar = CURR_TOKEN select 1;
+                if (EXPECT_SYM("var")) then {
                     NEXT_SYM();
 
-                    if (EXPECT_SYM(":")) then {
+                    if (EXPECT_TYPE("identifier")) then {
+                        private _enumerationVar = [CURR_TOKEN] call IdentifierNode;
                         NEXT_SYM();
 
-                        private _list = 1 call parseExpression;
-
-                        if (EXPECT_SYM(")")) then {
+                        if (EXPECT_SYM(":")) then {
                             NEXT_SYM();
 
-                            private _block = [];
+                            private _list = 1 call parseExpression;
 
-                            if (ACCEPT_SYM("{")) then {
-                                _block = call parseBlock;
-                            } else {
-                                private _statement = call parseStatement;
-                                _block = [[_statement]] call BlockNode;
+                            if (EXPECT_SYM(")")) then {
+                                NEXT_SYM();
+
+                                private _block = [];
+
+                                if (ACCEPT_SYM("{")) then {
+                                    _block = call parseBlock;
+                                } else {
+                                    private _statement = call parseStatement;
+                                    _block = [[_statement]] call BlockNode;
+                                };
+
+                                _node = [_list,_enumerationVar,_block] call ForeachNode;
+                                _node breakout "parseForStatement";
                             };
+                        };
 
-                            _node = [_list,_enumerationVar,_block] call ForeachNode;
-                            _node breakout "parseForStatement";
+                    };
+                };
+            };
+        };
+    };
+};
+
+/*
+switch (condition) {
+    case expression : {
+
+    }
+
+    defaul {
+
+    }
+}
+*/
+parseSwitchStatement = {
+    scopename "parseSwitchStatement";
+
+    if (ACCEPT_SYM("switch")) then {
+        NEXT_SYM();
+
+        if (EXPECT_SYM("(")) then {
+            NEXT_SYM();
+
+            private _switchCondition = 1 call parseExpression;
+
+            if (EXPECT_SYM(")")) then {
+                NEXT_SYM();
+
+                if (EXPECT_SYM("{")) then {
+                    NEXT_SYM();
+
+                    private _cases = [];
+
+                    while {ACCEPT_SYM("case") || {ACCEPT_SYM("default")}} do {
+                        private _caseCondition = [];
+
+                        if (ACCEPT_SYM("case")) then {
+                            NEXT_SYM();
+                            _caseCondition = 1 call parseExpression;
+                        } else {
+                            NEXT_SYM();
+                        };
+
+                        if (EXPECT_SYM(":")) then {
+                            NEXT_SYM();
+
+                            private _caseBlock = call parseBlock;
+                            _cases pushback [_caseCondition,_caseBlock];
                         };
                     };
 
+                    if (EXPECT_SYM("}")) then {
+                        NEXT_SYM();
+
+                        private _switchNode = [_switchCondition,_cases] call SwitchNode;
+                        _switchNode breakout "parseSwitchStatement";
+                    };
                 };
             };
         };
@@ -575,6 +655,9 @@ parseStatement = {
     if (!isnil "_node") exitwith {_node};
 
     _node = call parseForStatement;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseSwitchStatement;
     if (!isnil "_node") exitwith {_node};
 
     _node = 1 call parseExpression;
