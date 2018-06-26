@@ -32,6 +32,19 @@ for(var _z = _y; _z < 50; _z++) {
 for(var _player : allplayers())
 	hint(getpos(_player));
 
+// switch
+switch (_x) {
+	case 0: {
+
+	}
+	case 1: {
+
+	}
+	default: {
+
+	}
+}
+
 // built in object support
 // using the sOOP library
 _object = new("classname");
@@ -45,4 +58,10 @@ setDamage(player(), damage(player()) * 0.50);
 	var _a = 22;
 }
 isnil(_a); // true
+
+// lambdas
+var _x = function { var _y = 2 + 5 * 6; };
+
+// lambda invokation
+_x();
 ```
