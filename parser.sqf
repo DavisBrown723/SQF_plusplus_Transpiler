@@ -283,58 +283,13 @@ parseFunctionCall = {
 parseLambda = {
     scopename "parseLambda";
 
-    private _rawSQF = false;
-    if (ACCEPT_SYM("SQF")) then {
-        CONSUME();
-        _rawSQF = true;
-    };
-
     if (ACCEPT_TYPE("identifier") && { (CURR_TOKEN select 1) == "function"}) then {
         CONSUME();
 
-        // parse block without interpretation
-        if (_rawSQF) then {
+        private _body = call parseBlock;
 
-            if (EXPECT_SYM("{")) then {
-                private _sqfTokens = [];
-                private _depth = 1;
-                CONSUME();
-
-                while {_depth > 0} do {
-                    private _currSymbol = CURR_TOKEN select 1;
-
-                    switch (_currSymbol) do {
-                        case "{": {
-                            _depth = _depth + 1;
-                            _sqfTokens pushback CURR_TOKEN;
-                        };
-                        case "}": {
-                            _depth = _depth - 1;
-
-                            if (_depth > 0) then {
-                                _sqfTokens pushback CURR_TOKEN;
-                            };
-                        };
-                        default {
-                            _sqfTokens pushback CURR_TOKEN;
-                        };
-                    };
-
-                    CONSUME();
-                };
-
-                private _node = [_sqfTokens] call rawSQFNode;
-                _node breakout "parseLambda";
-            };
-        } else {
-            private _body = call parseBlock;
-            private _node = [_body] call lambdaNode;
-            _node breakout "parseLambda";
-        };
-    } else {
-        if (_rawSQF) then {
-            BACKTRACK();
-        };
+        private _node = [_body] call lambdaNode;
+        _node breakout "parseLambda";
     };
 };
 
@@ -486,20 +441,63 @@ parseAssignment = {
 
 parseBlock = {
     scopename "parseBlock";
+
+    private _rawSQF = false;
+    if (ACCEPT_SYM("SQF")) then {
+        _rawSQF = true;
+        CONSUME();
+    };
+
     if (ACCEPT_SYM("{")) then {
         CONSUME();
 
-        private _statements = [];
+        private "_node";
+        if (!_rawSQF) then {
+            private _statements = [];
 
-        while {!ACCEPT_SYM("}")} do {
-            _statements pushback (call parseStatement);
+            while {!ACCEPT_SYM("}")} do {
+                _statements pushback (call parseStatement);
+            };
+
+            if (EXPECT_SYM("}")) then {
+                CONSUME();
+
+                _node = [_statements] call BlockNode;
+            };
+        } else {
+            private _sqfTokens = [];
+            private _depth = 1;
+
+            while {_depth > 0} do {
+                private _currSymbol = CURR_TOKEN select 1;
+
+                switch (_currSymbol) do {
+                    case "{": {
+                        _depth = _depth + 1;
+                        _sqfTokens pushback CURR_TOKEN;
+                    };
+                    case "}": {
+                        _depth = _depth - 1;
+
+                        if (_depth > 0) then {
+                            _sqfTokens pushback CURR_TOKEN;
+                        };
+                    };
+                    default {
+                        _sqfTokens pushback CURR_TOKEN;
+                    };
+                };
+
+                CONSUME();
+            };
+
+            _node = [_sqfTokens] call rawSQFNode;
         };
 
-        if (EXPECT_SYM("}")) then {
-            CONSUME();
-
-            private _node = [_statements] call BlockNode;
-            _node breakout "parseBlock";
+        _node breakout "parseBlock";
+    } else {
+        if (_rawSQF) then {
+            BACKTRACK();
         };
     };
 };
@@ -727,8 +725,6 @@ parseSwitchStatement = {
 parseNamedFunctionDefinition = {
     scopename "parseNamedFunctionDefinition";
 
-    // namedFunctionNode
-
     if (ACCEPT_SYM("function")) then {
         CONSUME();
 
@@ -772,8 +768,7 @@ parseStatement = {
     // unnamed scope
     private _node = call parseBlock;
     if (!isnil "_node") exitwith {
-        _node set [0,"unnamed_scope"];
-        _node
+        ["unnamed_scope", _node]
     };
 
     _node = 1 call parseExpression;

@@ -198,8 +198,9 @@ translateNode = {
         };
 
         case "unnamed_scope": {
-            _node set [0,"block"];
-            private _code = "call {" + (_node call translateNode) + "};";
+            private _block = _node select 1;
+
+            private _code = "call {" + (_block call translateNode) + "};";
             _code breakout "translateNode";
         };
 
@@ -221,11 +222,10 @@ translateNode = {
         case "raw_sqf": {
             private _tokens = _node select 1;
 
-            private _code = "{ ";
+            private _code = "";
             {
                 _code = _code + (_x select 1) + " ";
             } foreach _tokens;
-            _code = _code + "};";
 
             _code breakout "translateNode";
         };
