@@ -139,6 +139,12 @@ lambdaNode = {
     ["lambda", _body]
 };
 
+rawSQFNode = {
+    params ["_tokens"];
+
+    ["raw_sqf", _tokens]
+};
+
 namedFunctionNode = {
     params ["_identifier","_body"];
 
@@ -277,12 +283,58 @@ parseFunctionCall = {
 parseLambda = {
     scopename "parseLambda";
 
+    private _rawSQF = false;
+    if (ACCEPT_SYM("SQF")) then {
+        CONSUME();
+        _rawSQF = true;
+    };
+
     if (ACCEPT_TYPE("identifier") && { (CURR_TOKEN select 1) == "function"}) then {
         CONSUME();
 
-        private _body = call parseBlock;
-        private _node = [_body] call lambdaNode;
-        _node breakout "parseLambda"
+        // parse block without interpretation
+        if (_rawSQF) then {
+
+            if (EXPECT_SYM("{")) then {
+                private _sqfTokens = [];
+                private _depth = 1;
+                CONSUME();
+
+                while {_depth > 0} do {
+                    private _currSymbol = CURR_TOKEN select 1;
+
+                    switch (_currSymbol) do {
+                        case "{": {
+                            _depth = _depth + 1;
+                            _sqfTokens pushback CURR_TOKEN;
+                        };
+                        case "}": {
+                            _depth = _depth - 1;
+
+                            if (_depth > 0) then {
+                                _sqfTokens pushback CURR_TOKEN;
+                            };
+                        };
+                        default {
+                            _sqfTokens pushback CURR_TOKEN;
+                        };
+                    };
+
+                    CONSUME();
+                };
+
+                private _node = [_sqfTokens] call rawSQFNode;
+                _node breakout "parseLambda";
+            };
+        } else {
+            private _body = call parseBlock;
+            private _node = [_body] call lambdaNode;
+            _node breakout "parseLambda";
+        };
+    } else {
+        if (_rawSQF) then {
+            BACKTRACK();
+        };
     };
 };
 

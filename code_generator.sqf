@@ -218,6 +218,18 @@ translateNode = {
             _code breakout "translateNode";
         };
 
+        case "raw_sqf": {
+            private _tokens = _node select 1;
+
+            private _code = "{ ";
+            {
+                _code = _code + (_x select 1) + " ";
+            } foreach _tokens;
+            _code = _code + "};";
+
+            _code breakout "translateNode";
+        };
+
     };
 
     ""
