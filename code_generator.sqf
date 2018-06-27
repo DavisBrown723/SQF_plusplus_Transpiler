@@ -5,6 +5,14 @@ translateNode = {
 
     switch (_node select 0) do {
 
+        case "expression_statement": {
+            private _expression = _node select 1;
+
+            private _code = format ["%1;", _expression call translateNode];
+
+            _code breakout "translateNode";
+        };
+
         case "block": {
             private _blockNodes = _node select 1;
 
@@ -167,10 +175,9 @@ translateNode = {
 
             private _unaryIndex = (sqfCommands select 1) findif {_function == _x};
             if (_unaryIndex != -1) then {
-                _arguments = _arguments apply {_x call translateNode};
-                private _argString = "[" + (_arguments joinstring ",") + "]";
+                private _rhs = (_arguments select 0) call translateNode;
 
-                private _code = format ["(%1 %2)", _function, _argString];
+                private _code = format ["(%1 %2)", _function, _rhs];
                 _code breakout "translateNode";
             };
 

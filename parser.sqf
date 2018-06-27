@@ -7,7 +7,7 @@
 
 #define TOKENS_LEFT()       (_tokenPointer < _tokenCount - 1)
 
-#define NEXT_SYM()          ADVANCE(); CURR_TOKEN = _tokens select _tokenPointer;
+#define CONSUME()           ADVANCE(); CURR_TOKEN = _tokens select _tokenPointer;
 #define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer;
 
 #define ACCEPT_SYM(char)    (!isnil "__token" && {(CURR_TOKEN select 1) == char})
@@ -34,7 +34,7 @@ parserCreate = {
     // generate AST
 
     private _tokenCount = count _tokens;
-    private _tokenPointer = -1; // will be incremented by first NEXT_SYM() call
+    private _tokenPointer = -1; // will be incremented by first CONSUME() call
 
     private _ast = [];
 
@@ -42,7 +42,7 @@ parserCreate = {
 
         scopename "ast_generation";
         private "__token";
-        NEXT_SYM();
+        CONSUME();
         while {_tokenPointer < _tokenCount} do {
             _ast pushback (call parseStatement);
         };
@@ -155,7 +155,7 @@ parseIdentifier = {
 
     if (ACCEPT_TYPE("identifier")) then {
         private _identifierNode = [CURR_TOKEN] call identifierNode;
-        NEXT_SYM();
+        CONSUME();
         _identifierNode breakout "parseIdentifier";
     };
 };
@@ -165,25 +165,25 @@ parseLiteral = {
 
     if (ACCEPT_TYPE("number_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
-        NEXT_SYM();
+        CONSUME();
         _literalNode breakout "parseLiteral";
     };
 
     if (ACCEPT_TYPE("string_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
-        NEXT_SYM();
+        CONSUME();
         _literalNode breakout "parseLiteral";
     };
 
     if (ACCEPT_TYPE("bool_literal")) then {
         private _literalNode = [CURR_TOKEN] call literalNode;
-        NEXT_SYM();
+        CONSUME();
         _literalNode breakout "parseLiteral";
     };
 
     // parse array literal
     if (ACCEPT_SYM("[")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (ACCEPT_SYM("]")) then {
             private _literalNode = [["array_literal", []]] call literalNode;
@@ -207,13 +207,13 @@ parseLiteral = {
             _argExpressions pushback _expressionNode;
 
             if ((CURR_TOKEN select 1) == ",") then {
-                NEXT_SYM();
+                CONSUME();
                 _argsLeft = true;
             };
         };
 
         if (EXPECT_SYM("]")) then {
-            NEXT_SYM();
+            CONSUME();
 
             private _literalNode = [["array_literal", _argExpressions]] call literalNode;
             _literalNode breakout "parseLiteral";
@@ -226,10 +226,10 @@ parseFunctionCall = {
 
     if (ACCEPT_TYPE("identifier")) then {
         private _identifier = CURR_TOKEN select 1;
-        NEXT_SYM();
+        CONSUME();
 
         if (ACCEPT_SYM("(")) then {
-            NEXT_SYM();
+            CONSUME();
 
             // confirmed function call
 
@@ -252,14 +252,14 @@ parseFunctionCall = {
 
                     //if (ACCEPT_SYM(",")) then {
                     if ((CURR_TOKEN select 1) == ",") then {
-                        NEXT_SYM();
+                        CONSUME();
                         _argsLeft = true;
                     };
                 };
             };
 
             if (EXPECT_SYM(")")) then {
-                NEXT_SYM();
+                CONSUME();
             } else {
                 hint "ERROR: Missing )";
                 breakto "ast_generation";
@@ -278,7 +278,7 @@ parseLambda = {
     scopename "parseLambda";
 
     if (ACCEPT_TYPE("identifier") && { (CURR_TOKEN select 1) == "function"}) then {
-        NEXT_SYM();
+        CONSUME();
 
         private _body = call parseBlock;
         private _node = [_body] call lambdaNode;
@@ -291,7 +291,7 @@ parseUnaryOperation = {
 
     if (ACCEPT_TYPE("operator") && {(CURR_TOKEN select 1) in unaryOperators}) then {
         private _operator = CURR_TOKEN select 1;
-        NEXT_SYM();
+        CONSUME();
 
         private _expressionNode = call parseExpression;
         if (!isnil "_expressionNode") then {
@@ -309,12 +309,12 @@ parseAtom = {
     scopename "parseAtom";
 
     if (ACCEPT_SYM("(")) then {
-        NEXT_SYM();
+        CONSUME();
         _node = 1 call parseExpression;
 
         if (EXPECT_SYM(")")) then {
             if (!isnil "_node") then {
-                NEXT_SYM();
+                CONSUME();
                 _node breakout "parseAtom";
             } else {
                 hint "ERROR: Invalid expression";
@@ -364,7 +364,7 @@ parseExpression = {
             _nextMinPrecedence = _opPrecedence + 1;
         };
 
-        NEXT_SYM();
+        CONSUME();
         private _atomRHS = _nextMinPrecedence call parseExpression;
 
         _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call binaryOperationNode;
@@ -380,13 +380,13 @@ parseAssignment = {
 
     if (ACCEPT_SYM("var")) then {
         _keywords pushback "var";
-        NEXT_SYM();
+        CONSUME();
     };
 
     if (ACCEPT_TYPE("identifier")) then {
         private _identifier = CURR_TOKEN;
         private _identifierNode = [_identifier] call IdentifierNode;
-        NEXT_SYM();
+        CONSUME();
 
         private _handled = false;
 
@@ -404,16 +404,16 @@ parseAssignment = {
 
             _handled = true;
 
-            NEXT_SYM();
+            CONSUME();
 
             private _expressionNode = 1 call parseExpression;
             private _node = [_keywords,"=",_identifierNode,_expressionNode] call assignmentNode;
 
-            if (EXPECT_SYM(";")) then {
-                NEXT_SYM();
-
-                _node breakout "parseAssignment";
+            if (ACCEPT_SYM(";")) then {
+                CONSUME();
             };
+
+            _node breakout "parseAssignment";
         };
 
         if (!_handled) then {
@@ -435,7 +435,7 @@ parseAssignment = {
 parseBlock = {
     scopename "parseBlock";
     if (ACCEPT_SYM("{")) then {
-        NEXT_SYM();
+        CONSUME();
 
         private _statements = [];
 
@@ -444,7 +444,7 @@ parseBlock = {
         };
 
         if (EXPECT_SYM("}")) then {
-            NEXT_SYM();
+            CONSUME();
 
             private _node = [_statements] call BlockNode;
             _node breakout "parseBlock";
@@ -458,14 +458,14 @@ parseIfStatement = {
     scopename "parseIfStatement";
 
     if (ACCEPT_SYM("if")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (EXPECT_SYM("(")) then {
-            NEXT_SYM();
+            CONSUME();
             private _conditionExpression = 1 call parseExpression;
 
             if (EXPECT_SYM(")")) then {
-                NEXT_SYM();
+                CONSUME();
 
                 private _trueBlock = [];
                 private _falseBlock = [];
@@ -482,7 +482,7 @@ parseIfStatement = {
                 // parse false block
 
                 if (ACCEPT_SYM("else")) then {
-                    NEXT_SYM();
+                    CONSUME();
 
                     if (ACCEPT_SYM("{")) then {
                         _falseBlock = call parseBlock;
@@ -503,14 +503,14 @@ parseWhileStatement = {
     scopename "parseWhileStatement";
 
     if (ACCEPT_SYM("while")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (EXPECT_SYM("(")) then {
-            NEXT_SYM();
+            CONSUME();
             private _conditionExpression = 1 call parseExpression;
 
             if (EXPECT_SYM(")")) then {
-                NEXT_SYM();
+                CONSUME();
 
                 private _block = [];
 
@@ -532,17 +532,17 @@ parseForStatement = {
     scopename "parseForStatement";
 
     if (ACCEPT_SYM("for")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (EXPECT_SYM("(")) then {
-            NEXT_SYM();
+            CONSUME();
 
             // peek ahead to see which type of for-loop we have
             // for(;;;)
             // for(var _e : _list)
 
-            NEXT_SYM();
-            NEXT_SYM();
+            CONSUME();
+            CONSUME();
 
             if (!ACCEPT_SYM(":")) then {
                 BACKTRACK();
@@ -550,11 +550,14 @@ parseForStatement = {
 
                 // for-loop
                 private _preStatement = call parseStatement;
-                private _conditionStatement = call parseStatement;
+
+                private _conditionStatement = 1 call parseExpression;
+                CONSUME(); // remove ending semicolon
+
                 private _postStatement = call parseStatement;
 
                 if (EXPECT_SYM(")")) then {
-                    NEXT_SYM();
+                    CONSUME();
 
                     private _block = [];
 
@@ -574,19 +577,19 @@ parseForStatement = {
                 BACKTRACK();
 
                 if (EXPECT_SYM("var")) then {
-                    NEXT_SYM();
+                    CONSUME();
 
                     if (EXPECT_TYPE("identifier")) then {
                         private _enumerationVar = [CURR_TOKEN] call IdentifierNode;
-                        NEXT_SYM();
+                        CONSUME();
 
                         if (EXPECT_SYM(":")) then {
-                            NEXT_SYM();
+                            CONSUME();
 
                             private _list = 1 call parseExpression;
 
                             if (EXPECT_SYM(")")) then {
-                                NEXT_SYM();
+                                CONSUME();
 
                                 private _block = [];
 
@@ -624,18 +627,18 @@ parseSwitchStatement = {
     scopename "parseSwitchStatement";
 
     if (ACCEPT_SYM("switch")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (EXPECT_SYM("(")) then {
-            NEXT_SYM();
+            CONSUME();
 
             private _switchCondition = 1 call parseExpression;
 
             if (EXPECT_SYM(")")) then {
-                NEXT_SYM();
+                CONSUME();
 
                 if (EXPECT_SYM("{")) then {
-                    NEXT_SYM();
+                    CONSUME();
 
                     private _cases = [];
 
@@ -643,14 +646,14 @@ parseSwitchStatement = {
                         private _caseCondition = [];
 
                         if (ACCEPT_SYM("case")) then {
-                            NEXT_SYM();
+                            CONSUME();
                             _caseCondition = 1 call parseExpression;
                         } else {
-                            NEXT_SYM();
+                            CONSUME();
                         };
 
                         if (EXPECT_SYM(":")) then {
-                            NEXT_SYM();
+                            CONSUME();
 
                             private _caseBlock = call parseBlock;
                             _cases pushback [_caseCondition,_caseBlock];
@@ -658,7 +661,7 @@ parseSwitchStatement = {
                     };
 
                     if (EXPECT_SYM("}")) then {
-                        NEXT_SYM();
+                        CONSUME();
 
                         private _switchNode = [_switchCondition,_cases] call SwitchNode;
                         _switchNode breakout "parseSwitchStatement";
@@ -675,11 +678,11 @@ parseNamedFunctionDefinition = {
     // namedFunctionNode
 
     if (ACCEPT_SYM("function")) then {
-        NEXT_SYM();
+        CONSUME();
 
         if (ACCEPT_TYPE("identifier")) then {
             private _identifier = CURR_TOKEN select 1;
-            NEXT_SYM();
+            CONSUME();
 
             private _body = call parseBlock;
 
@@ -721,14 +724,12 @@ parseStatement = {
         _node
     };
 
-    // expressions such as function calls that make up an entire statement
-    // aren't generating semicolons to end the statement
     _node = 1 call parseExpression;
     if (!isnil "_node") exitwith {
         if (ACCEPT_SYM(";")) then {
-            NEXT_SYM();
+            CONSUME();
         };
 
-        _node
+        ["expression_statement", _node]
     };
 };
