@@ -84,6 +84,22 @@ translateNode = {
             };
         };
 
+        case "unary_statement": {
+            private _symbol = _node select 1;
+
+            switch (_symbol) do {
+                case "return": {
+                    private _expression = _node select 2;
+                    private _code = format ["%1 breakout 'sqf_pp_function_scope'", _expression call translateNode];
+                    _code breakout "translateNode";
+                };
+                default {
+                    private _code = _symbol;
+                    _code breakout "translateNode";
+                };
+            };
+        };
+
         case "unary": {
             private _operator = _node select 1;
             private _right = _node select 2;
@@ -222,7 +238,7 @@ translateNode = {
         case "lambda": {
             private _body = _node select 1;
 
-            private _code = "{" + (_body call translateNode) + "}";
+            private _code = "{scopename 'sqf_pp_function_scope'; " + (_body call translateNode) + "}";
             _code breakout "translateNode";
         };
 

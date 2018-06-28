@@ -127,6 +127,12 @@ nularStatementNode = {
     ["nular_statement",_symbol]
 };
 
+UnaryStatementNode = {
+    params ["_symbol","_right"];
+
+    ["unary_statement",_symbol,_right]
+};
+
 binaryOperationNode = {
     params ["_operator","_left","_right"];
 
@@ -765,12 +771,32 @@ parseNularStatements = {
     };
 };
 
+parseUnaryStatements = {
+    scopename "parseUnaryStatements";
+
+    if (ACCEPT_SYM("return")) then {
+        CONSUME();
+
+        private _expression = 1 call parseExpression;
+
+        if (EXPECT_SYM(";")) then {
+            CONSUME();
+
+            private _unaryNode = ["return", _expression] call UnaryStatementNode;
+            _unaryNode breakout "parseUnaryStatements";
+        };
+    };
+};
+
 parseStatement = {
     private "_node";
 
     // needs to be before parseAssignment
     // or parseAssignment needs to not accept keywords
     _node = call parseNularStatements;
+    if (!isnil "_node") exitwith {_node};
+
+    _node = call parseUnaryStatements;
     if (!isnil "_node") exitwith {_node};
 
     _node = call parseAssignment;
