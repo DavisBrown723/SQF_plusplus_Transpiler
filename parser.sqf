@@ -121,6 +121,12 @@ unaryOperationNode = {
     ["unary",_operator,_right]
 };
 
+nularStatementNode = {
+    params ["_symbol"];
+
+    ["nular_statement",_symbol]
+};
+
 binaryOperationNode = {
     params ["_operator","_left","_right"];
 
@@ -742,8 +748,30 @@ parseNamedFunctionDefinition = {
     };
 };
 
+parseNularStatements = {
+    scopename "parseNularStatements";
+
+    if (ACCEPT_SYM("break")) then {
+        CONSUME();
+
+        if (ACCEPT_SYM(";")) then {
+            CONSUME();
+
+            private _nularNode = ["break"] call nularStatementNode;
+            _nularNode breakout "parseNularStatements";
+        } else {
+            BACKTRACK();
+        };
+    };
+};
+
 parseStatement = {
     private "_node";
+
+    // needs to be before parseAssignment
+    // or parseAssignment needs to not accept keywords
+    _node = call parseNularStatements;
+    if (!isnil "_node") exitwith {_node};
 
     _node = call parseAssignment;
     if (!isnil "_node") exitwith {_node};
@@ -773,10 +801,10 @@ parseStatement = {
 
     _node = 1 call parseExpression;
     if (!isnil "_node") exitwith {
-        if (ACCEPT_SYM(";")) then {
+        if (EXPECT_SYM(";")) then {
             CONSUME();
-        };
 
-        ["expression_statement", _node]
+            ["expression_statement", _node]
+        };
     };
 };
