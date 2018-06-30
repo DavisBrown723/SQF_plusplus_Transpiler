@@ -63,7 +63,14 @@ translateNode = {
             if (_right isequalto "__PARSER_DEFINITION") then {
                 _code = _code + (format ["'%1';", _left call translateNode]);
             } else {
-                _code = _code + (format ["%1 %2 %3;", _left call translateNode, _operator, _right call translateNode]);
+                if (_operator == "=") then {
+                    // =
+                    _code = _code + (format ["%1 %2 %3;", _left call translateNode, _operator, _right call translateNode]);
+                } else {
+                    // +=, *=
+                    private _operatorOperation = _operator select [0,1];
+                    _code = _code + (format ["%1 = %1 %2 %3;", _left call translateNode, _operatorOperation, _right call translateNode]);
+                };
             };
 
             _code breakout "translateNode";
@@ -74,7 +81,7 @@ translateNode = {
 
             switch (_symbol) do {
                 case "break": {
-                    private _code = "breakto 'sqf_pp_nearestLoopScope'";
+                    private _code = "breakto 'sqf_pp_nearestLoopScope';";
                     _code breakout "translateNode";
                 };
                 default {
@@ -90,7 +97,15 @@ translateNode = {
             switch (_symbol) do {
                 case "return": {
                     private _expression = _node select 2;
-                    private _code = format ["%1 breakout 'sqf_pp_function_scope'", _expression call translateNode];
+
+                    private _arg = if (_expression isequalto []) then {
+                        ""
+                    } else {
+                        _expression call translateNode
+                    };
+
+                    private _code = format ["%1 breakout 'sqf_pp_function_scope';", _arg];
+
                     _code breakout "translateNode";
                 };
                 default {
@@ -113,6 +128,24 @@ translateNode = {
             private _right = _node select 3;
 
             private _code = switch (_operator) do {
+                /*
+                case ".": {
+                    if ((_right select 0) == "function_call") then {
+                        _right set [0,"method_call"];
+
+                        // extract method call info
+
+                        private _methodname = _right select
+
+                        // this.method()
+                        // left: this
+                        // right: [] call method
+                        format ["( (%1 getvariable ) )"];
+                    } else {
+                        format ["(%1 getvariable '%2')", _left call translateNode, _right call translateNode];
+                    };
+                };
+                */
                 default {
                     format ["(%1 %2 %3)", _left call translateNode, _operator, _right call translateNode];
                 };
@@ -126,10 +159,10 @@ translateNode = {
             private _trueBlock = _node select 2;
             private _falseBlock = _node select 3;
 
-            private _code = format ["if (%1) then {%2}", _condition call translateNode, _trueBlock call translateNode];
+            private _code = format ["if (%1) then {%2};", _condition call translateNode, _trueBlock call translateNode];
 
             if !(_falseBlock isequalto []) then {
-                _code = _code + format [" else {%1}", _falseBlock call translateNode];
+                _code = _code + format [" else {%1};", _falseBlock call translateNode];
             };
 
             _code breakout "translateNode";
@@ -139,7 +172,7 @@ translateNode = {
             private _condition = _node select 1;
             private _block = _node select 2;
 
-            private _code = format ["scopename 'sqf_pp_nearestLoopScope';while {%1} do {%2}", _condition call translateNode, _block call translateNode];
+            private _code = format ["scopename 'sqf_pp_nearestLoopScope';while {%1} do {%2};", _condition call translateNode, _block call translateNode];
 
             _code breakout "translateNode";
         };
@@ -192,6 +225,26 @@ translateNode = {
             _code breakout "translateNode";
         };
 
+        case "class_access": {
+            private _object = _node select 1;
+            private _member = _node select 2;
+
+            private _code = format ["(%1 getvariable %2)", _object call translateNode, _member call translateNode];
+            _code breakout "translateNode";
+        };
+
+        case "method_call": {
+            private _object = _node select 1;
+            private _method = _node select 2;
+            private _arguments = _node select 3;
+
+            _arguments = _arguments apply {_x call translateNode};
+            _arguments = "[" + (_arguments joinstring ",") + "]";
+
+            private _code = format ["(%1 call (%2 getvariable '%3'))", _arguments, _object call translateNode, _method];
+            _code breakout "translateNode";
+        };
+
         case "function_call": {
             private _function = _node select 1;
             private _arguments = _node select 2;
@@ -238,7 +291,7 @@ translateNode = {
         case "lambda": {
             private _body = _node select 1;
 
-            private _code = "{scopename 'sqf_pp_function_scope'; " + (_body call translateNode) + "}";
+            private _code = format ["{scopename 'sqf_pp_function_scope'; _this call {%1}}", _body call translateNode];
             _code breakout "translateNode";
         };
 
@@ -246,7 +299,7 @@ translateNode = {
             private _function = _node select 1;
             private _body = _node select 2;
 
-            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; %2};", _function, _body call translateNode];
+            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; _this call {%2}};", _function, _body call translateNode];
             _code breakout "translateNode";
         };
 
@@ -258,6 +311,38 @@ translateNode = {
                 _code = _code + (_x select 1) + " ";
             } foreach _tokens;
 
+            _code breakout "translateNode";
+        };
+
+        case "class_definition": {
+            private _classname = _node select 1;
+            private _parents = _node select 2;
+            private _variables = _node select 3;
+            private _functions = _node select 4;
+
+            private _code = "call {";
+            _code = _code + (format ["private _classname = %1;", str _classname]);
+
+            _code = _code + "private _parents = [";
+            if !(_parents isequalto []) then {
+                {
+                    if (_foreachindex != 0) then {_code = _code + ","};
+                    _code = _code + (str _x);
+                } foreach _parents;
+            };
+            _code = _code + "];";
+
+            _code = _code + "private _classVariables = [];";
+            {
+                _code = _code + (format ["_classVariables pushback [%1,%2];", _x select 0, (_x select 1) call translateNode]);
+            } foreach _variables;
+
+            _code = _code + "private _classMethods = [];";
+            {
+                _code = _code + (format ["[%1,{%2}];", str (_x select 0), (_x select 1) call translateNode]);
+            } foreach _functions;
+
+            _code = _code + "};";
             _code breakout "translateNode";
         };
 

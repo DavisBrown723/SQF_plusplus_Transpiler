@@ -7,17 +7,20 @@
 
 #define TOKENS_LEFT()       (_tokenPointer < _tokenCount - 1)
 
-#define CONSUME()           ADVANCE(); CURR_TOKEN = _tokens select _tokenPointer;
+#define CONSUME()           ADVANCE(); if (_tokenPointer < _tokenCount) then {CURR_TOKEN = _tokens select _tokenPointer} else {CURR_TOKEN = nil};
 #define BACKTRACK()         REGRESS(); CURR_TOKEN = _tokens select _tokenPointer;
 
 #define ACCEPT_SYM(char)    (!isnil "__token" && {(CURR_TOKEN select 1) == char})
 #define ACCEPT_TYPE(char)   (!isnil "__token" && {(CURR_TOKEN select 0) == char})
 
-#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint format ["EXPECT ERROR: %1", CURR_TOKEN]; breakto "ast_generation" })
-#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint format ["EXPECT ERROR: %1", CURR_TOKEN]; breakto "ast_generation" })
+#define EXPECT_SYM(char)    (if (ACCEPT_SYM(char))  then {true} else { hint parsetext format ["<t size='1.6'> ERROR: Expecting   %1" + endl + "Received   %2" + endl + "Line   %3</t>", char, CURR_TOKEN select 1, CURR_TOKEN select 2]; breakto "ast_generation"})
+#define EXPECT_TYPE(char)   (if (ACCEPT_TYPE(char)) then {true} else { hint parsetext format ["<t size='1.6'> ERROR: Expecting   %1" + endl + "Received   %2" + endl + "Line   %3</t>", char, CURR_TOKEN select 1, CURR_TOKEN select 2]; breakto "ast_generation"})
 
 // Wishlist
 // subscript operator : array[0][2];
+// continue statement
+//  - invert containing condition
+//  - wrap parenting for/while body in true-block
 
 // Refactor priorities
 // we use way too much breakto/breakout right now
@@ -41,6 +44,7 @@ parserCreate = {
     if (_tokenCount > 0) then {
 
         scopename "ast_generation";
+
         private "__token";
         CONSUME();
         while {_tokenPointer < _tokenCount} do {
@@ -145,6 +149,18 @@ functionCallNode = {
     ["function_call", _function, _arguments]
 };
 
+methodCallNode = {
+    params ["_object","_method","_arguments"];
+
+    ["method_call", _object, _method, _arguments]
+};
+
+classAccessNode = {
+    params ["_object","_member"];
+
+    ["class_access", _object, _member]
+};
+
 lambdaNode = {
     params ["_body"];
 
@@ -161,6 +177,12 @@ namedFunctionNode = {
     params ["_identifier","_body"];
 
     ["named_function",_identifier,_body]
+};
+
+classDefinitionNode = {
+    params ["_classname","_parents","_varNodes","_funcNodes"];
+
+    ["class_definition",_classname,_parents,_varNodes,_funcNodes]
 };
 
 
@@ -204,6 +226,8 @@ parseLiteral = {
         CONSUME();
 
         if (ACCEPT_SYM("]")) then {
+            CONSUME();
+
             private _literalNode = [["array_literal", []]] call literalNode;
             _literalNode breakout "parseLiteral";
         };
@@ -312,12 +336,50 @@ parseUnaryOperation = {
         private _operator = CURR_TOKEN select 1;
         CONSUME();
 
-        private _expressionNode = call parseExpression;
-        if (!isnil "_expressionNode") then {
-            private _unaryNode = [_operator,_expressionNode] call unaryOperationNode;
-            _unaryNode breakout "parseUnaryOperation";
-        } else {
-            hint "ERROR";
+        switch (_operator) do {
+            case "--";
+            case "++": {
+                private "_unaryNode";
+
+                if (ACCEPT_TYPE("identifier")) then {
+                    // pre increment
+
+                    private _identifier = CURR_TOKEN;
+
+                    CONSUME();
+
+                    private _unaryNode = [_operator,_identifier] call unaryOperationNode;
+                    _preStatementNodeList pushback _unaryNode;
+                } else {
+                    // post increment
+                    // backtrack to identifier
+
+                    BACKTRACK();
+                    BACKTRACK();
+
+                    private _identifier = CURR_TOKEN;
+
+                    CONSUME();
+                    CONSUME();
+
+                    private _unaryNode = [_operator,_identifier] call unaryOperationNode;
+                    _postStatementNodeList pushback _unaryNode;
+                };
+
+                // dummy node for the sake of returning a value
+                private _dummyNode = ["",""] call unaryOperationNode;
+                _dummyNode breakout "parseUnaryOperation";
+            };
+
+            default {
+                private _expressionNode = call parseExpression;
+                if (!isnil "_expressionNode") then {
+                    private _unaryNode = [_operator,_expressionNode] call unaryOperationNode;
+                    _unaryNode breakout "parseUnaryOperation";
+                } else {
+                    hint "ERROR";
+                };
+            };
         };
     };
 };
@@ -386,7 +448,17 @@ parseExpression = {
         CONSUME();
         private _atomRHS = _nextMinPrecedence call parseExpression;
 
-        _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call binaryOperationNode;
+        // collapse result into left hande value
+
+        if (_currSymbol == ".") then {
+            if ((_atomRHS select 0) == "function_call") then {
+                _atomLHS = [_atomLHS, _atomRHS select 1, _atomRHS select 2] call methodCallNode;
+            } else {
+                _atomLHS = [_atomLHS, _atomRHS] call classAccessNode;
+            };
+        } else {
+            _atomLHS = [_currSymbol,_atomLHS,_atomRHS] call binaryOperationNode;
+        };
     };
 
     _atomLHS
@@ -412,21 +484,24 @@ parseAssignment = {
         if (ACCEPT_SYM(";")) then {
             // declaration
 
+            CONSUME();
+
             _handled = true;
 
             private _node = [_keywords,"",_identifierNode,"__PARSER_DEFINITION"] call assignmentNode;
             _node breakout "parseAssignment";
         };
 
-        if (ACCEPT_SYM("=")) then {
+        if ((CURR_TOKEN select 1) in assignmentOperators) then {
             // initialization
 
             _handled = true;
 
+            private _operator = CURR_TOKEN select 1;
             CONSUME();
 
             private _expressionNode = 1 call parseExpression;
-            private _node = [_keywords,"=",_identifierNode,_expressionNode] call assignmentNode;
+            private _node = [_keywords,_operator,_identifierNode,_expressionNode] call assignmentNode;
 
             if (ACCEPT_SYM(";")) then {
                 CONSUME();
@@ -777,6 +852,11 @@ parseUnaryStatements = {
     if (ACCEPT_SYM("return")) then {
         CONSUME();
 
+        if (ACCEPT_SYM(";")) then {
+            private _unaryNode = ["return", []] call UnaryStatementNode;
+            _unaryNode breakout "parseUnaryStatements";
+        };
+
         private _expression = 1 call parseExpression;
 
         if (EXPECT_SYM(";")) then {
@@ -788,8 +868,109 @@ parseUnaryStatements = {
     };
 };
 
+parseClassDefinition = {
+    scopename "parseClassDefinition";
+
+    if (ACCEPT_SYM("class")) then {
+        CONSUME();
+
+        if (ACCEPT_TYPE("identifier")) then {
+            private _classname = CURR_TOKEN select 1;
+            CONSUME();
+
+            // parse parent classes
+
+            private _parentClassnames = [];
+
+            if (ACCEPT_SYM(":")) then {
+                CONSUME();
+
+                private _parentsLeft = true;
+                while {_parentsLeft} do {
+                    _parentsLeft = false;
+
+                    if (ACCEPT_TYPE("identifier")) then {
+                        private _classname = CURR_TOKEN select 1;
+                        _parentClassnames pushback _classname;
+
+                        CONSUME();
+                    } else {
+                        if (_parentsLeft) then {
+                            hint "ERROR: Trailing Comma";
+                        };
+                    };
+
+                    if ((CURR_TOKEN select 1) == ",") then {
+                        CONSUME();
+                        _parentsLeft = true;
+                    };
+                };
+            };
+
+            if (EXPECT_SYM("{")) then {
+                CONSUME();
+
+                // parse class defining block
+
+                private _vars = [];
+                private _funcs = [];
+
+                while {!ACCEPT_SYM("}")} do {
+                    scopename "classDefinitionParseLoop";
+
+                    call {
+                        // parse member variable definition
+                        // roll a custom solution here because
+                        // we have strict requirements
+                        if (ACCEPT_SYM("var")) then {
+                            CONSUME();
+
+                            if (ACCEPT_TYPE("identifier")) then {
+                                private _identifier = CURR_TOKEN select 1;
+
+                                CONSUME();
+
+                                if (EXPECT_SYM("=")) then {
+                                    CONSUME();
+
+                                    private _value = 1 call parseExpression;
+
+                                    if (EXPECT_SYM(";")) then {
+                                        CONSUME();
+
+                                        _vars pushback [_identifier,_value];
+
+                                        breakto "classDefinitionParseLoop";
+                                    };
+                                };
+                            };
+                        };
+
+                        private _node = call parseNamedFunctionDefinition;
+                        if (!isnil "_node") then {
+                            _funcs pushback [_node select 1, _node select 2];
+                            breakto "classDefinitionParseLoop";
+                        };
+                    };
+                };
+
+                if (EXPECT_SYM("}")) then {
+                    CONSUME();
+
+                    // create class node
+                    private _node = [_classname,_parentClassnames,_vars,_funcs] call classDefinitionNode;
+
+                    _node breakout "parseClassDefinition";
+                };
+            };
+        };
+    };
+};
+
 parseStatement = {
     private "_node";
+
+    if (ACCEPT_SYM(";")) exitwith {CONSUME(); ["empty_statement"]};
 
     // needs to be before parseAssignment
     // or parseAssignment needs to not accept keywords
@@ -817,6 +998,9 @@ parseStatement = {
     _node = call parseNamedFunctionDefinition;
     if (!isnil "_node") exitwith {_node};
 
+    _node = call parseClassDefinition;
+    if (!isnil "_node") exitwith {_node};
+
     // function definition
 
     // unnamed scope
@@ -830,7 +1014,13 @@ parseStatement = {
         if (EXPECT_SYM(";")) then {
             CONSUME();
 
+            // change this node's type instead of
+            // creating a containing node
+            // reduce parenthesis in translated code
             ["expression_statement", _node]
         };
     };
+
+    // unrecognized token
+    CONSUME();
 };

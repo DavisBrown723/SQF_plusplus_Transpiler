@@ -11,10 +11,11 @@ digits = ["0","1","2","3","4","5","6","7","8","9"];
 
 separators = [ "," , "(" , ")" , "[", "]", "{" , "}" ];
 
-singleCharOperators = [ "=" , "!" , "+" , "-" , "*" , "/" , "%" , ">" , "<" , "." ];
-doubleCharOperators = ["<=",">=","==","!=","&&","||"];
+assignmentOperators = ["=","+=","-=","*=","/=","%="];
+singleCharOperators = [ "=",  "!" , "+" , "-" , "*" , "/" , "%" , ">" , "<" , "." ];
+doubleCharOperators = [ "+=","-","*=","/=","%=",  "<=",">=","==","!=","&&","||","++","--"];
 
-unaryOperators = ["!"];
+unaryOperators = ["!","++","--"];
 binaryOperators = singleCharOperators + doubleCharOperators - unaryOperators;
 
 identifierStartChars = letters + ["_"];
@@ -35,7 +36,10 @@ semicolon = ";";
 
 
 operatorInfoMap = [
-    [".",  6,"left"],
+    [".",  7,"left"],
+
+    ["++", 6,"left"],
+    ["--", 6,"left"],
 
     ["*",  5,"left"],
     ["/",  5,"left"],
