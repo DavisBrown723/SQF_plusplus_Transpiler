@@ -334,13 +334,15 @@ translateNode = {
 
             _code = _code + "private _classVariables = [];";
             {
-                _code = _code + (format ["_classVariables pushback [%1,%2];", _x select 0, (_x select 1) call translateNode]);
+                _code = _code + (format ["_classVariables pushback ['%1',%2];", _x select 0, (_x select 1) call translateNode]);
             } foreach _variables;
 
             _code = _code + "private _classMethods = [];";
             {
-                _code = _code + (format ["[%1,{%2}];", str (_x select 0), (_x select 1) call translateNode]);
+                _code = _code + (format ["_classMethods pushback ['%1',{%2}];", _x select 0, (_x select 1) call translateNode]);
             } foreach _functions;
+
+            _code = _code + "[_classname,_parents,_classVariables,_classMethods] call soop_fnc_defineClass";
 
             _code = _code + "};";
             _code breakout "translateNode";
