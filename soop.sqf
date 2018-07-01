@@ -80,3 +80,19 @@ soop_fnc_defineClass = {
 
     missionnamespace setvariable [(_classname call soop_fnc_stringToFullClassname), _templateClass];
 };
+
+
+
+soop_fnc_newObject = {
+    params ["_classname","_args"];
+
+    private _instance = (_classname call soop_fnc_getClassTemplate) call soop_fnc_copyObject;
+    _args call (_instance getvariable "constructor");
+
+    _instance
+};
+
+soop_fnc_deleteObject = {
+    {call _x} foreach (_this getvariable DESTRUCTORS_PROPERTY);
+    deletelocation __instance;
+};
