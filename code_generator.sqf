@@ -241,6 +241,7 @@ translateNode = {
             _arguments = _arguments apply {_x call translateNode};
             _arguments = "[" + (_arguments joinstring ",") + "]";
 
+            // #TODO: Remove the temporary this variable swap
             private _code = format ["(%1 call (%2 getvariable '%3'))", _arguments, _object call translateNode, _method];
             _code breakout "translateNode";
         };
@@ -295,11 +296,37 @@ translateNode = {
             _code breakout "translateNode";
         };
 
+        case "function_parameter": {
+            private _validTypes = _node select 1;
+            private _varname = _node select 2;
+            private _defaultValue = _node select 3;
+
+            _defaultValue = if (_defaultValue isequalto "sqfpp_defValue") then {nil} else {_defaultValue call translateNode};
+            _validTypes = _validTypes apply { _x call typeToSQFType };
+
+            private _validTypesStr = "[";
+            {
+                if (_foreachindex > 0) then {_validTypesStr = _validTypesStr + ","};
+                _validTypesStr = _validTypesStr + _x;
+            } foreach _validTypes;
+            _validTypesStr = _validTypesStr + "]";
+
+            private _code = format ["['%1',%2,%3]", _varname, _defaultValue, _validTypesStr];
+            _code breakout "translateNode";
+        };
+
         case "named_function": {
             private _function = _node select 1;
-            private _body = _node select 2;
+            private _parameters = _node select 2;
+            private _body = _node select 3;
 
-            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; _this call {%2}};", _function, _body call translateNode];
+            private _parameterString = "";
+            {
+                if (_foreachindex > 0) then {_parameterString = _parameterString + ", "};
+                _parameterString = _parameterString + (_x call translateNode);
+            } foreach _parameters;
+
+            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; _this call {params [%2]; %3}};", _function, _parameterString, _body call translateNode];
             _code breakout "translateNode";
         };
 
@@ -339,12 +366,30 @@ translateNode = {
 
             _code = _code + "private _classMethods = [];";
             {
-                _code = _code + (format ["_classMethods pushback ['%1',{%2}];", _x select 0, (_x select 1) call translateNode]);
+                _code = _code + (format ["_classMethods pushback ['%1',{scopename 'sqf_pp_function_scope'; %2}];", _x select 0, (_x select 1) call translateNode]);
             } foreach _functions;
 
             _code = _code + "[_classname,_parents,_classVariables,_classMethods] call soop_fnc_defineClass";
 
             _code = _code + "};";
+            _code breakout "translateNode";
+        };
+
+        case "new_instance": {
+            private _class = _node select 1;
+            private _arguments = _node select 2;
+
+            _arguments = _arguments apply {_x call translateNode};
+            _arguments = "[" + (_arguments joinstring ",") + "]";
+
+            private _code = format ["(['%1',%2] call soop_fnc_newInstance)", _class, _arguments];
+            _code breakout "translateNode";
+        };
+
+        case "delete_instance": {
+            private _instance = _node select 1;
+
+            private _code = format ["(%1 call soop_fnc_deleteInstance)", _instance];
             _code breakout "translateNode";
         };
 
