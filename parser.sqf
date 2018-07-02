@@ -125,6 +125,18 @@ unaryOperationNode = {
     ["unary",_operator,_right]
 };
 
+newInstanceNode = {
+    params ["_class","_arguments"];
+
+    ["new_instance",_class,_arguments]
+};
+
+deleteInstanceNode = {
+    params ["_instance"];
+
+    ["delete_instance",_instance]
+};
+
 nularStatementNode = {
     params ["_symbol"];
 
@@ -173,10 +185,16 @@ rawSQFNode = {
     ["raw_sqf", _tokens]
 };
 
-namedFunctionNode = {
-    params ["_identifier","_body"];
+functionParameterNode = {
+    params ["_validTypes","_varName","_defaultValue"];
 
-    ["named_function",_identifier,_body]
+    ["function_parameter", _validTypes, _varName, _defaultValue]
+};
+
+namedFunctionNode = {
+    params ["_identifier","_parameterList","_body"];
+
+    ["named_function",_identifier,_parameterList,_body]
 };
 
 classDefinitionNode = {
@@ -382,6 +400,29 @@ parseUnaryOperation = {
             };
         };
     };
+
+    if (ACCEPT_SYM("new")) then {
+        CONSUME();
+
+        private _instanceData = call parseFunctionCall;
+        private _class = _instanceData select 1;
+        private _arguments = _instanceData select 2;
+
+        private _newInstanceNode = [_class,_arguments] call newInstanceNode;
+        _newInstanceNode breakout "parseUnaryOperation";
+    };
+
+    if (ACCEPT_SYM("delete")) then {
+        CONSUME();
+
+        if (EXPECT_TYPE("identifier")) then {
+            private _instance = CURR_TOKEN select 1;
+            CONSUME();
+
+            private _deleteInstanceNode = [_instance] call deleteInstanceNode;
+            _deleteInstanceNode breakout "parseUnaryOperation";
+        };
+    };
 };
 
 parseAtom = {
@@ -414,10 +455,10 @@ parseAtom = {
     _node = call parseLambda;
     if (!isnil "_node") exitwith {_node};
 
-    _node = call parseIdentifier;
+    _node = call parseUnaryOperation;
     if (!isnil "_node") exitwith {_node};
 
-    _node = call parseUnaryOperation;
+    _node = call parseIdentifier;
     if (!isnil "_node") exitwith {_node};
 };
 
@@ -809,6 +850,7 @@ parseSwitchStatement = {
     };
 };
 
+// function add(number,string _a = 0, number,string _b = 0) { return _a + _b; }
 parseNamedFunctionDefinition = {
     scopename "parseNamedFunctionDefinition";
 
@@ -819,9 +861,68 @@ parseNamedFunctionDefinition = {
             private _identifier = CURR_TOKEN select 1;
             CONSUME();
 
+            // parse parameter list
+
+            private _parameterList = [];
+            if (EXPECT_SYM("(")) then {
+                CONSUME();
+
+                while {!ACCEPT_SYM(")")} do {
+                    // parse valid var types
+
+                    private _validTypes = [];
+                    while {
+                        ACCEPT_TYPE("identifier") &&
+                        {
+                            private _type = CURR_TOKEN select 1;
+                            typeMap findif {_type == (_x select 0)} != -1
+                        }
+                    } do {
+                        _validTypes pushbackunique (CURR_TOKEN select 1);
+                        CONSUME();
+
+                        // this allows for trailing commas but w/e
+                        if ((CURR_TOKEN select 1) == ",") then {
+                            CONSUME();
+                        };
+                    };
+                    if (_validTypes findif {_x == "any"} != -1) then {_validTypes = []};
+
+                    // grab var name
+                    // check for validity, no need to handle manually
+                    // since expect macro will break parsing
+                    if (EXPECT_TYPE("identifier")) then {};
+                    private _parameterName = CURR_TOKEN select 1;
+                    CONSUME();
+
+                    // parse optional default value
+
+                    private _defaultValue = "sqfpp_defValue";
+                    if (ACCEPT_SYM("=")) then {
+                        CONSUME();
+
+                        _defaultvalue = 1 call parseExpression;
+                    };
+
+                    // remove comma, prep for next parameter
+                    // this allows for trailing commas but w/e
+                    if ((CURR_TOKEN select 1) == ",") then {
+                        CONSUME();
+                    };
+
+                    private _parameterNode = [_validTypes,_parameterName,_defaultvalue] call functionParameterNode;
+                    _parameterList pushback _parameterNode;
+                };
+
+                // consume closing parenthesis
+                CONSUME();
+            };
+
+            // parse body
+
             private _body = call parseBlock;
 
-            private _functionNode = [_identifier,_body] call namedFunctionNode;
+            private _functionNode = [_identifier,_parameterList,_body] call namedFunctionNode;
             _functionNode breakout "parseNamedFunctionDefinition";
         } else {
             hint "ERROR: Function definition missing name"
@@ -852,10 +953,16 @@ parseUnaryStatements = {
     if (ACCEPT_SYM("return")) then {
         CONSUME();
 
+        // empty return statement
+
         if (ACCEPT_SYM(";")) then {
+            CONSUME();
+
             private _unaryNode = ["return", []] call UnaryStatementNode;
             _unaryNode breakout "parseUnaryStatements";
         };
+
+        // return a value
 
         private _expression = 1 call parseExpression;
 

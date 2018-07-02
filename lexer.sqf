@@ -69,6 +69,36 @@ getOperatorAssociativity = {
     (operatorInfoMap select _opIndex) select 2
 };
 
+// used to convert function argument types
+// for use with params command
+typeMap = [
+    ["any", "[]"],
+
+    ["number", "0"],
+    ["bool", "true"],
+    ["array", "[]"],
+    ["string", "''"],
+    ["function", "{}"],
+
+    ["object", "objnull"],
+    ["side", "east"],
+    ["config", "confignull"],
+    ["group", "grpnull"],
+
+    ["control", "controlnull"],
+    ["display", "displaynull"],
+
+    ["thread", "scriptnull"],
+    ["group", "grpnull"]
+
+    //["text", "composeText ['']"]
+];
+
+typeToSQFType = {
+    private _typeIndex = typeMap findif {(_x select 0) == _this};
+    if (_typeIndex != -1) then {(typeMap select _typeIndex) select 1};
+};
+
 // parser
 
 lexerCreate = {

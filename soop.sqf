@@ -83,7 +83,7 @@ soop_fnc_defineClass = {
 
 
 
-soop_fnc_newObject = {
+soop_fnc_newInstance = {
     params ["_classname","_args"];
 
     private _instance = (_classname call soop_fnc_getClassTemplate) call soop_fnc_copyObject;
@@ -92,7 +92,7 @@ soop_fnc_newObject = {
     _instance
 };
 
-soop_fnc_deleteObject = {
+soop_fnc_deleteInstance = {
     {call _x} foreach (_this getvariable DESTRUCTORS_PROPERTY);
     deletelocation __instance;
 };
