@@ -1,3 +1,17 @@
+// helpers
+
+parameterListToString = {
+    private _parameterString = "";
+    {
+        if (_foreachindex > 0) then {_parameterString = _parameterString + ", "};
+        _parameterString = _parameterString + (_x call translateNode);
+    } foreach _this;
+
+    _parameterString
+};
+
+//
+
 translateNode = {
     private _node = _this;
 
@@ -290,9 +304,13 @@ translateNode = {
         };
 
         case "lambda": {
-            private _body = _node select 1;
+            private _parameters = _node select 1;
+            private _body = _node select 2;
 
-            private _code = format ["{scopename 'sqf_pp_function_scope'; _this call {%1}}", _body call translateNode];
+            private _parameterString = _parameters call parameterListToString;
+            private _paramsString = if (_parameterString == "") then {""} else {format ["params [%1];", _parameterString]};
+
+            private _code = format ["{scopename 'sqf_pp_function_scope'; _this call {%1 %2}}", _paramsString, _body call translateNode];
             _code breakout "translateNode";
         };
 
@@ -301,7 +319,7 @@ translateNode = {
             private _varname = _node select 2;
             private _defaultValue = _node select 3;
 
-            _defaultValue = if (_defaultValue isequalto "sqfpp_defValue") then {nil} else {_defaultValue call translateNode};
+            _defaultValue = if (_defaultValue isequalto "sqfpp_defValue") then {"nil"} else {_defaultValue call translateNode};
             _validTypes = _validTypes apply { _x call typeToSQFType };
 
             private _validTypesStr = "[";
@@ -320,13 +338,10 @@ translateNode = {
             private _parameters = _node select 2;
             private _body = _node select 3;
 
-            private _parameterString = "";
-            {
-                if (_foreachindex > 0) then {_parameterString = _parameterString + ", "};
-                _parameterString = _parameterString + (_x call translateNode);
-            } foreach _parameters;
+            private _parameterString = _parameters call parameterListToString;
+            private _paramsString = if (_parameterString == "") then {""} else {format ["params [%1];", _parameterString]};
 
-            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; _this call {params [%2]; %3}};", _function, _parameterString, _body call translateNode];
+            private _code = format ["%1 = {scopename 'sqf_pp_function_scope'; _this call {%2 %3}};", _function, _paramsString, _body call translateNode];
             _code breakout "translateNode";
         };
 
