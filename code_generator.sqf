@@ -142,24 +142,6 @@ translateNode = {
             private _right = _node select 3;
 
             private _code = switch (_operator) do {
-                /*
-                case ".": {
-                    if ((_right select 0) == "function_call") then {
-                        _right set [0,"method_call"];
-
-                        // extract method call info
-
-                        private _methodname = _right select
-
-                        // this.method()
-                        // left: this
-                        // right: [] call method
-                        format ["( (%1 getvariable ) )"];
-                    } else {
-                        format ["(%1 getvariable '%2')", _left call translateNode, _right call translateNode];
-                    };
-                };
-                */
                 default {
                     format ["(%1 %2 %3)", _left call translateNode, _operator, _right call translateNode];
                 };
@@ -243,7 +225,7 @@ translateNode = {
             private _object = _node select 1;
             private _member = _node select 2;
 
-            private _code = format ["(%1 getvariable %2)", _object call translateNode, _member call translateNode];
+            private _code = format ["(%1 getvariable '%2')", _object call translateNode, _member call translateNode];
             _code breakout "translateNode";
         };
 
@@ -252,11 +234,14 @@ translateNode = {
             private _method = _node select 2;
             private _arguments = _node select 3;
 
+            _object = _object call translateNode;
+
             _arguments = _arguments apply {_x call translateNode};
+            _arguments = [_object] + _arguments;
             _arguments = "[" + (_arguments joinstring ",") + "]";
 
             // #TODO: Remove the temporary this variable swap
-            private _code = format ["(%1 call (%2 getvariable '%3'))", _arguments, _object call translateNode, _method];
+            private _code = format ["(%1 call (%2 getvariable '%3'))", _arguments, _object, _method];
             _code breakout "translateNode";
         };
 
@@ -381,7 +366,12 @@ translateNode = {
 
             _code = _code + "private _classMethods = [];";
             {
-                _code = _code + (format ["_classMethods pushback ['%1',{scopename 'sqf_pp_function_scope'; %2}];", _x select 0, (_x select 1) call translateNode]);
+                _x params ["_name","_parameters","_body"];
+
+                private _parameterString = _parameters call parameterListToString;
+                private _paramsString = if (_parameterString == "") then {""} else {format ["params [%1];", _parameterString]};
+
+                _code = _code + (format ["_classMethods pushback ['%1',{scopename 'sqf_pp_function_scope';%2 %3}];", _name, _paramsString, _body call translateNode]);
             } foreach _functions;
 
             _code = _code + "[_classname,_parents,_classVariables,_classMethods] call soop_fnc_defineClass";

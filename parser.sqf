@@ -190,6 +190,7 @@ functionParameterNode = {
 
     ["function_parameter", _validTypes, _varName, _defaultValue]
 };
+methodInstanceParameter = [[],"__sqfpp_this","sqfpp_defValue"] call functionParameterNode;
 
 namedFunctionNode = {
     params ["_identifier","_parameterList","_body"];
@@ -1058,7 +1059,11 @@ parseClassDefinition = {
 
                         private _node = call parseNamedFunctionDefinition;
                         if (!isnil "_node") then {
-                            _funcs pushback [_node select 1, _node select 2];
+                            // all methods take the instance object
+                            // as the first parameter
+                            private _methodParameters = [(+methodInstanceParameter)] + (_node select 2);
+
+                            _funcs pushback [_node select 1, _methodParameters, _node select 3];
                             breakto "classDefinitionParseLoop";
                         };
                     };
