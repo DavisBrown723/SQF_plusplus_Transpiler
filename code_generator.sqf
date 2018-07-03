@@ -62,32 +62,43 @@ translateNode = {
             _code breakout "translateNode";
         };
 
-        case "assignment": {
-            private _keywords = _node select 1;
-            private _operator = _node select 2;
-            private _left = _node select 3;
-            private _right = _node select 4;
+        case "variable_definition": {
+            private _expression = _node select 1;
 
-            private _code = "";
-
-            if ("var" in _keywords) then {
-                _code = _code + "private ";
-            };
-
-            if (_right isequalto "__PARSER_DEFINITION") then {
-                _code = _code + (format ["'%1';", _left call translateNode]);
-            } else {
-                if (_operator == "=") then {
-                    // =
-                    _code = _code + (format ["%1 %2 %3;", _left call translateNode, _operator, _right call translateNode]);
-                } else {
-                    // +=, *=
-                    private _operatorOperation = _operator select [0,1];
-                    _code = _code + (format ["%1 = %1 %2 %3;", _left call translateNode, _operatorOperation, _right call translateNode]);
-                };
-            };
-
+            private _code = format ["private '%1'", _expression call translateNode];
             _code breakout "translateNode";
+        };
+
+        case "assignment": {
+            private _left = _node select 1;
+            private _operator = _node select 2;
+            private _right = _node select 3;
+
+            if (_operator == "=") then {
+                private _code = switch (_left select 0) do {
+                    case "variable_definition": {
+                        format ["private %1 = %2", (_left select 1) call translateNode, _right call translateNode];
+                    };
+                    case "class_access": {
+                        private _object = _left select 1;
+                        private _member = _left select 2;
+
+                        systemchat format ["Object: %1   |   Member: %2", _object, _member];
+
+                        format ["%1 setvariable ['%2',%3]", _object call translateNode, _member call translateNode, _right call translateNode];
+                    };
+                    default {
+                        format ["%1 = %2", _left call translateNode, _right call translateNode];
+                    };
+                };
+
+                _code breakout "translateNode";
+            } else {
+                private _operatorOperation = _operator select [0,1];
+                private _code = format ["%1 = %1 %2 %3", _left call translateNode, _operatorOperation, _right call translateNode];
+
+                _code breakout "translateNode";
+            };
         };
 
         case "nular_statement": {
@@ -236,11 +247,11 @@ translateNode = {
 
             _object = _object call translateNode;
 
+            // methods take class instance as first argument
             _arguments = _arguments apply {_x call translateNode};
             _arguments = [_object] + _arguments;
             _arguments = "[" + (_arguments joinstring ",") + "]";
 
-            // #TODO: Remove the temporary this variable swap
             private _code = format ["(%1 call (%2 getvariable '%3'))", _arguments, _object, _method];
             _code breakout "translateNode";
         };
@@ -410,6 +421,7 @@ generateCode = {
 
     private _ast = _parser select 0;
     private _code = _ast call translateNode;
-    code = _code;
-    ""
+    code = _code; // #TODO: remove
+
+    _code
 };
