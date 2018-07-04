@@ -1,6 +1,8 @@
 # SQF_plusplus_Transpiler
 A transpiler to transform a new procedural language, SQF++, to the Arma 3 scripting language SQF.
 
+Visit the wiki for more in-depth information: https://github.com/DavisBrown723/SQF_plusplus_Transpiler/wiki
+
 
 Sample SQF++ Snippet
 
@@ -47,7 +49,7 @@ switch (_x) {
 
 // built in object support
 // using the sOOP library
-_object = new("classname");
+_object = new Classname();
 _object.property1 = _object.method1("arg1","arg2");
 
 // SQF commands as functions in classic format
