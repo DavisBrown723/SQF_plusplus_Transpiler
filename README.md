@@ -37,13 +37,13 @@ for(var _player : allplayers())
 // switch
 switch (_x) {
 	case 0: {
-
+		break;
 	}
 	case 1: {
-
+		break;
 	}
 	default: {
-
+		break;
 	}
 }
 
@@ -61,8 +61,13 @@ setDamage(player(), damage(player()) * 0.50);
 }
 isnil(_a); // true
 
+// named functions
+function add(Number,String _a, Number,String _b) {
+	return _a + _b;
+}
+
 // lambdas
-var _x = function { var _y = 2 + 5 * 6; };
+var _x = function() { var _y = 2 + 5 * 6; };
 
 // lambda invokation
 _x();
