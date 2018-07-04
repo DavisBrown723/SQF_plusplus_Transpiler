@@ -24,9 +24,9 @@ if (_y > 5)
 
 while (_y > 100) _y *= 2;
 
-// classic for loop
-// ++ and += styled number manipulation operators
-for(var _z = _y; _z < 50; _z++) {
+// classic for-loop
+// += styled assignment operators
+for(var _z = _y; _z < 50; _z += 1) {
   _z += 5;
 }
 
@@ -57,7 +57,7 @@ setDamage(player(), damage(player()) * 0.50);
 
 // unnamed scopes
 {
-	var _a = 22;
+    var _a = 22;
 }
 isnil(_a); // true
 
