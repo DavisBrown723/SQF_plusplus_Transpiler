@@ -421,7 +421,6 @@ generateCode = {
 
     private _ast = _parser select 0;
     private _code = _ast call translateNode;
-    code = _code; // #TODO: remove
 
     _code
 };

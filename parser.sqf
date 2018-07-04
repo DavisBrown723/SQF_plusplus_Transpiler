@@ -32,8 +32,6 @@ parserCreate = {
     private _lexer = [_source] call lexerCreate;
     private _tokens = (_lexer select 1) select { !((_x select 0) in ["whitespace","end_line"]) };
 
-    tokens = _tokens; // #TODO: remove
-
     // generate AST
 
     private _tokenCount = count _tokens;
@@ -55,7 +53,6 @@ parserCreate = {
     };
 
     _ast = [_ast] call BlockNode;
-    ast = _ast; // #TODO: remove
 
     [_ast]
 };

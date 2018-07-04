@@ -1,6 +1,8 @@
 scannerCreate = {
     params ["_source"];
 
+    _source = preprocessFile _source;
+
     private _sourceByChar = _source splitstring "";
     private _sourceSize = count _source;
 
