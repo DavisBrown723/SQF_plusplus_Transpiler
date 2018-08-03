@@ -26,7 +26,7 @@ soop_fnc_copyObjectProperties = {
 
 soop_fnc_copyObject = {
     private _new = call soop_fnc_createBlankObject;
-    [_this,_new] call soop_fnc_copyObjectProperties;
+    [_new,_this] call soop_fnc_copyObjectProperties;
 
     _new
 };
@@ -73,12 +73,20 @@ soop_fnc_defineClass = {
     _templateClass setvariable [CLASSNAME_PROPERTY, _classname];
     _templateClass setvariable [PARENTS_PROPERTY, _parents];
 
-    { _templateClass setvariable [_x select 0, _x select 1] } foreach _vars;
+    private _destructors = [];
+    _destructors append (_funcs select {(_x select 0) == "destructor"});
+
+    _templateClass setvariable [DESTRUCTORS_PROPERTY, _destructors];
+
+    {_templateClass setvariable [_x select 0, _x select 1]} foreach _vars;
     { _templateClass setvariable [_x select 0, _x select 1] } foreach _funcs;
 
-    _classname call soop_fnc_compileClass;
+    _templateClass setvariable [VARIABLES_PROPERTY, _vars apply {_x select 0}];
+    _templateClass setvariable [METHODS_PROPERTY, (_funcs apply {_x select 0}) - ["constructor","destructor"]];
 
     missionnamespace setvariable [(_classname call soop_fnc_stringToFullClassname), _templateClass];
+
+    _classname call soop_fnc_compileClass;
 };
 
 
@@ -87,7 +95,7 @@ soop_fnc_newInstance = {
     params ["_classname","_args"];
 
     private _instance = (_classname call soop_fnc_getClassTemplate) call soop_fnc_copyObject;
-    _args call (_instance getvariable "constructor");
+    [_instance,_args] call (_instance getvariable "constructor");
 
     _instance
 };
