@@ -83,8 +83,6 @@ translateNode = {
                         private _object = _left select 1;
                         private _member = _left select 2;
 
-                        systemchat format ["Object: %1   |   Member: %2", _object, _member];
-
                         format ["%1 setvariable ['%2',%3]", _object call translateNode, _member call translateNode, _right call translateNode];
                     };
                     default {
@@ -145,6 +143,7 @@ translateNode = {
             private _right = _node select 2;
 
             private _code = format ["(%1 %2)", _operator, _right call translateNode];
+            _code breakout "translateNode";
         };
 
         case "binary": {
@@ -166,11 +165,14 @@ translateNode = {
             private _trueBlock = _node select 2;
             private _falseBlock = _node select 3;
 
-            private _code = format ["if (%1) then {%2};", _condition call translateNode, _trueBlock call translateNode];
+            private _code = format ["if (%1) then {%2}", _condition call translateNode, _trueBlock call translateNode];
 
             if !(_falseBlock isequalto []) then {
-                _code = _code + format [" else {%1};", _falseBlock call translateNode];
+                _code = _code + format [" else {%1}", _falseBlock call translateNode];
             };
+
+            // close ending block
+            _code = _code + ";";
 
             _code breakout "translateNode";
         };
@@ -260,16 +262,18 @@ translateNode = {
             private _function = _node select 1;
             private _arguments = _node select 2;
 
+            private _argumentCount = count _arguments;
+
             // determine if function is SQF command
 
             private _nularIndex = (sqfCommands select 0) findif {_function == _x};
-            if (_nularIndex != -1) then {
+            if (_nularIndex != -1 && {_argumentCount == 0}) then {
                 private _code = _function;
                 _code breakout "translateNode";
             };
 
             private _unaryIndex = (sqfCommands select 1) findif {_function == _x};
-            if (_unaryIndex != -1) then {
+            if (_unaryIndex != -1 && {_argumentCount == 1}) then {
                 private _rhs = (_arguments select 0) call translateNode;
 
                 private _code = format ["(%1 %2)", _function, _rhs];
@@ -277,7 +281,7 @@ translateNode = {
             };
 
             private _binaryIndex = (sqfCommands select 2) findif {_function == _x};
-            if (_binaryIndex != -1) then {
+            if (_binaryIndex != -1 && {_argumentCount == 2}) then {
                 _arguments params ["_argLeft","_argRight"];
                 private _code = format ["(%1 %2 %3)", _argLeft call translateNode, _function, _argRight call translateNode];
                 _code breakout "translateNode";
@@ -415,12 +419,20 @@ translateNode = {
 };
 
 generateCode = {
-    params ["_source"];
+    params ["_source", ["_compile", true]];
 
     _parser = [_source] call parserCreate;
 
     private _ast = _parser select 0;
     private _code = _ast call translateNode;
 
-    _code
+    // wrap code in scope
+    // to prevent 'return' from breaking other functions
+    _code = format ["scopename 'sqf_pp_function_scope'; _this call {%1}", _code];
+
+    if (_compile) then {
+        compile _code
+    } else {
+        _code
+    };
 };
