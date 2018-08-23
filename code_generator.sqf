@@ -3,14 +3,14 @@ sqfpp_fnc_compile = {
 
     private _ast = _sourceText call sqfpp_fnc_parse;
 
-	// #TODO
-	parsed = _ast;
+    // #TODO
+    parsed = _ast;
 
 
     private _code = _ast call sqfpp_fnc_translateNode;
     _code = format ["scopename '___functionScope___'; %1", _code];
 
-	if (_compile) then { compile _code } else { _code }
+    if (_compile) then { compile _code } else { _code }
 };
 
 sqfpp_fnc_compileFile = {
@@ -18,7 +18,7 @@ sqfpp_fnc_compileFile = {
 
     private _sourceText = preprocessFile _file;
 
-	[_sourceText,_compile] call sqfpp_fnc_compile
+    [_sourceText,_compile] call sqfpp_fnc_compile
 };
 
 sqfpp_fnc_loadClassFile = {
@@ -26,10 +26,10 @@ sqfpp_fnc_loadClassFile = {
 
     private _sourceText = preprocessFile _file;
 
-	// execute translated file
-	// to load class definition to missionnamespace
+    // execute translated file
+    // to load class definition to missionnamespace
 
-	call ([_sourceText,_compile] call sqfpp_fnc_compile)
+    call ([_sourceText,_compile] call sqfpp_fnc_compile)
 };
 
 
@@ -48,10 +48,10 @@ sqfpp_fnc_parameterListToString = {
 
 
 sqfpp_fnc_translateNode = {
-	scopename "translateNode";
+    scopename "translateNode";
 
     private _node = _this;
-	private _nodeType = _node select 0;
+    private _nodeType = _node select 0;
 
     switch (_nodeType) do {
 
@@ -65,7 +65,7 @@ sqfpp_fnc_translateNode = {
         case "literal": {
             private _literalToken = _node select 1;
 
-			_literalToken params ["_literalType","_literalValue"];
+            _literalToken params ["_literalType","_literalValue"];
 
             if (_literalType == "array_literal") then {
                 private _translatedElements = _literalValue apply {_x call sqfpp_fnc_translateNode};
@@ -95,7 +95,7 @@ sqfpp_fnc_translateNode = {
             _code breakout "translateNode";
         };
 
-		// this is only called when a value has not been given
+        // this is only called when a value has not been given
         case "variable_definition": {
             private _definedVarToken = _node select 1;
 
@@ -111,11 +111,11 @@ sqfpp_fnc_translateNode = {
             if (_operator == "=") then {
                 private _code = switch (_left select 0) do {
                     case "variable_definition": {
-						private _definedVarToken = _left select 1;
-						private _definedVar = _definedVarToken select 1;
-						private _definedVarIsLocal = (_definedVar select [0,1]) == "_";
+                        private _definedVarToken = _left select 1;
+                        private _definedVar = _definedVarToken select 1;
+                        private _definedVarIsLocal = (_definedVar select [0,1]) == "_";
 
-						private _prefix = if (_definedVarIsLocal) then { "private " } else { "" };
+                        private _prefix = if (_definedVarIsLocal) then { "private " } else { "" };
 
                         format ["%1%2 = %3", _prefix, _definedVar, _right call sqfpp_fnc_translateNode];
                     };
@@ -139,40 +139,40 @@ sqfpp_fnc_translateNode = {
             };
         };
 
-		/*
-			function = {
-				scopename "___functionScope___";
+        /*
+            function = {
+                scopename "___functionScope___";
 
-				while (true) do {
-					scopename "___loopScope___";
+                while (true) do {
+                    scopename "___loopScope___";
 
-					if (true) then {
-						breakout "___loopScope___";
-					};
-				};
-			};
-		*/
+                    if (true) then {
+                        breakout "___loopScope___";
+                    };
+                };
+            };
+        */
 
         case "break": {
             private _code = "breakout '___loopScope___';";
             _code breakout "translateNode";
         };
 
-		/*
-			function = {
-				scopename "___functionScope___";
+        /*
+            function = {
+                scopename "___functionScope___";
 
-				while (true) do {
-					scopename "___loopScope___";
+                while (true) do {
+                    scopename "___loopScope___";
 
-					call {
-						if (true) then {
-							breakto "___loopScope___";
-						};
-					};
-				};
-			};
-		*/
+                    call {
+                        if (true) then {
+                            breakto "___loopScope___";
+                        };
+                    };
+                };
+            };
+        */
 
 
         case "continue": {
@@ -181,11 +181,11 @@ sqfpp_fnc_translateNode = {
         };
 
         case "return": {
-			private _expression = _node select 1;
+            private _expression = _node select 1;
 
-			private _noReturnValue = _expression isequalto [];
+            private _noReturnValue = _expression isequalto [];
 
-			private _toReturn = if (_noReturnValue) then { "" } else { (_expression call sqfpp_fnc_translateNode) + " "};
+            private _toReturn = if (_noReturnValue) then { "" } else { (_expression call sqfpp_fnc_translateNode) + " "};
 
             private _code = format ["%1breakout '___functionScope___';", _toReturn];
             _code breakout "translateNode";
@@ -207,7 +207,7 @@ sqfpp_fnc_translateNode = {
             private _operatorInfo = _operator call sqfpp_fnc_getOperatorInfo;
             private _operatorAttributes = _operatorInfo select 3;
 
-			private _code = format ["(%1 %2 %3)", _left call sqfpp_fnc_translateNode, _operator, _right call sqfpp_fnc_translateNode];
+            private _code = format ["(%1 %2 %3)", _left call sqfpp_fnc_translateNode, _operator, _right call sqfpp_fnc_translateNode];
 
             _code breakout "translateNode";
         };
@@ -232,14 +232,14 @@ sqfpp_fnc_translateNode = {
         case "while": {
             private _condition = _node select 1;
             private _block = _node select 2;
-			private _needsScopeWrap = _node select 3;
+            private _needsScopeWrap = _node select 3;
 
-			private _loopInternal = "scopename '___loopScope___'";
-			if (_needsScopeWrap) then {
-				_loopInternal = format ["%1; call {%2};", _loopInternal, _block call sqfpp_fnc_translateNode];
-			} else {
-				_loopInternal = format ["%1; %2", _loopInternal, _block call sqfpp_fnc_translateNode];
-			};
+            private _loopInternal = "scopename '___loopScope___'";
+            if (_needsScopeWrap) then {
+                _loopInternal = format ["%1; call {%2};", _loopInternal, _block call sqfpp_fnc_translateNode];
+            } else {
+                _loopInternal = format ["%1; %2", _loopInternal, _block call sqfpp_fnc_translateNode];
+            };
 
             private _code = format ["while {%1} do {%2};", _condition call sqfpp_fnc_translateNode, _loopInternal];
 
@@ -251,15 +251,15 @@ sqfpp_fnc_translateNode = {
             private _condition = _node select 2;
             private _post = _node select 3;
             private _block = _node select 4;
-			private _needsScopeWrap = _node select 5;
+            private _needsScopeWrap = _node select 5;
 
-			private _loopPrefix = "scopename '___loopScope___'";
-			private _loopInternal = format ["%1%2", _block call sqfpp_fnc_translateNode, _post call sqfpp_fnc_translateNode];
-			if (_needsScopeWrap) then {
-				_loopInternal = format ["%1; call {%2};", _loopPrefix, _loopInternal];
-			} else {
-				_loopInternal = format ["%1; %2", _loopPrefix, _loopInternal];
-			};
+            private _loopPrefix = "scopename '___loopScope___'";
+            private _loopInternal = format ["%1%2", _block call sqfpp_fnc_translateNode, _post call sqfpp_fnc_translateNode];
+            if (_needsScopeWrap) then {
+                _loopInternal = format ["%1; call {%2};", _loopPrefix, _loopInternal];
+            } else {
+                _loopInternal = format ["%1; %2", _loopPrefix, _loopInternal];
+            };
 
             private _code = format [
                 "%1 while {%2} do {%3};",
@@ -275,15 +275,15 @@ sqfpp_fnc_translateNode = {
             private _list = _node select 1;
             private _enumerableVar = _node select 2;
             private _block = _node select 3;
-			private _needsScopeWrap = _node select 4;
+            private _needsScopeWrap = _node select 4;
 
-			private _loopPrefix = "scopename '___loopScope___'";
-			private _loopInternal = format ["private %1 = _x;%2", _enumerableVar call sqfpp_fnc_translateNode, _block call sqfpp_fnc_translateNode];
-			if (_needsScopeWrap) then {
-				_loopInternal = format ["%1; call {%2};", _loopPrefix, _loopInternal];
-			} else {
-				_loopInternal = format ["%1; %2", _loopPrefix, _loopInternal];
-			};
+            private _loopPrefix = "scopename '___loopScope___'";
+            private _loopInternal = format ["private %1 = _x;%2", _enumerableVar call sqfpp_fnc_translateNode, _block call sqfpp_fnc_translateNode];
+            if (_needsScopeWrap) then {
+                _loopInternal = format ["%1; call {%2};", _loopPrefix, _loopInternal];
+            } else {
+                _loopInternal = format ["%1; %2", _loopPrefix, _loopInternal];
+            };
 
             private _code = format ["{%1} foreach %2;", _loopInternal, _list call sqfpp_fnc_translateNode];
 
@@ -327,7 +327,7 @@ sqfpp_fnc_translateNode = {
             _object = _object call sqfpp_fnc_translateNode;
 
             // methods take class instance as first argument
-			// manually inject it
+            // manually inject it
             _arguments = _arguments apply {_x call sqfpp_fnc_translateNode};
             _arguments = [_object] + _arguments;
             _arguments = "[" + (_arguments joinstring ",") + "]";

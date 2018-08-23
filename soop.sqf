@@ -107,7 +107,7 @@ soop_fnc_deleteInstance = {
 };
 
 soop_fnc_copyInstance = {
-	params ["_instance"];
+    params ["_instance"];
 
-	_instance call soop_fnc_copyObject
+    _instance call soop_fnc_copyObject
 };

@@ -100,7 +100,7 @@ sqfpp_fnc_parserErrorUI = {
         };
 
         private _contextLines = [[],[],[],[],[]];
-		private _typesToIgnore = ["end_line","end_of_file"];
+        private _typesToIgnore = ["end_line","end_of_file"];
 
         {
             private _token = _x;
@@ -108,10 +108,10 @@ sqfpp_fnc_parserErrorUI = {
             _tokenLocation params ["_line","_column"];
 
             if (_line >= _minLine && _line <= _maxLine) then {
-				if !(_tokenType in _typesToIgnore) then {
-					private _contextLine = _line - _minLine;
-					(_contextLines select _contextLine) pushback [_tokenContent,_column];
-				};
+                if !(_tokenType in _typesToIgnore) then {
+                    private _contextLine = _line - _minLine;
+                    (_contextLines select _contextLine) pushback [_tokenContent,_column];
+                };
             };
         } foreach _tokens;
 
@@ -139,17 +139,17 @@ sqfpp_fnc_parserErrorUI = {
                 private _currLine = _minLine + _foreachindex;
                 private _lineDiff = _errorLine - _currLine;
 
-				private _calculateLineWidth = {
-					params ["_text"];
+                private _calculateLineWidth = {
+                    params ["_text"];
 
-					private _characters = _text splitstring "";
-					private _characterCount = count _characters;
+                    private _characters = _text splitstring "";
+                    private _characterCount = count _characters;
 
-					private _widthPerCharacter = safezoneW * 0.0037;
-					private _lineWidth = _widthPerCharacter * _characterCount;
+                    private _widthPerCharacter = safezoneW * 0.0037;
+                    private _lineWidth = _widthPerCharacter * _characterCount;
 
-					_lineWidth
-				};
+                    _lineWidth
+                };
 
                 switch (true) do {
 
@@ -164,8 +164,8 @@ sqfpp_fnc_parserErrorUI = {
                         _textCtrl ctrlSetTextColor [0,1,0,1];
                         _textCtrl ctrlsettooltip "OK";
 
-						_textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineText] call _calculateLineWidth, _lineHeight];
-						_textCtrl ctrlcommit 0;
+                        _textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineText] call _calculateLineWidth, _lineHeight];
+                        _textCtrl ctrlcommit 0;
                     };
 
                     // green -> red
@@ -182,8 +182,8 @@ sqfpp_fnc_parserErrorUI = {
                             };
                         } foreach _tokensInLine;
 
-						_textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineTextBeforeError] call _calculateLineWidth, _lineHeight];
-						_textCtrl ctrlcommit 0;
+                        _textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineTextBeforeError] call _calculateLineWidth, _lineHeight];
+                        _textCtrl ctrlcommit 0;
 
                         _textCtrl ctrlsettext _lineTextBeforeError;
                         _textCtrl ctrlSetTextColor [0,1,0,1];
@@ -211,8 +211,8 @@ sqfpp_fnc_parserErrorUI = {
                             _lineText = _lineText + (_x select 0);
                         } foreach _tokensInLine;
 
-						_textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineText] call _calculateLineWidth, _lineHeight];
-						_textCtrl ctrlcommit 0;
+                        _textCtrl ctrlsetposition [_lineX, _lineY + (_lineHeight * _foreachindex), [_lineText] call _calculateLineWidth, _lineHeight];
+                        _textCtrl ctrlcommit 0;
 
                         _textCtrl ctrlsettext _lineText;
                         _textCtrl ctrlSetTextColor [0.741,0.706,0.216,1];
@@ -286,7 +286,7 @@ sqfpp_fnc_createNode = {
         case "variable_definition": {
             _properties params ["_varIdentifierToken"];
 
-			private _varIdentifierNode = ["identifier", [_varIdentifierToken]] call sqfpp_fnc_createNode;
+            private _varIdentifierNode = ["identifier", [_varIdentifierToken]] call sqfpp_fnc_createNode;
 
             [_type, _varIdentifierNode]
         };
@@ -308,8 +308,8 @@ sqfpp_fnc_createNode = {
         case "new_instance": {
             _properties params ["_functionCallNode"];
 
-			private _class = _functionCallNode select 1;
-			private _arguments = _functionCallNode select 2;
+            private _class = _functionCallNode select 1;
+            private _arguments = _functionCallNode select 2;
 
             [_type,_class,_arguments]
         };
@@ -341,13 +341,13 @@ sqfpp_fnc_createNode = {
         case "class_access": {
             _properties params ["_symbol","_object","_member"];
 
-			private _memberNodeType = _member select 0;
-			if (_memberNodeType == "function_call") exitwith {
-				private _methodName = _member select 1;
-				private _methodArgs = _member select 2;
+            private _memberNodeType = _member select 0;
+            if (_memberNodeType == "function_call") exitwith {
+                private _methodName = _member select 1;
+                private _methodArgs = _member select 2;
 
-				["method_call", [_object, _methodName, _methodArgs]] call sqfpp_fnc_createNode;
-			};
+                ["method_call", [_object, _methodName, _methodArgs]] call sqfpp_fnc_createNode;
+            };
 
             [_type, _object, _member]
         };
@@ -980,43 +980,43 @@ sqfpp_fnc_parseUnaryOperation = {
 
     if (ACCEPT_TYPE("operator")) then {
         private _operator = CURR_TOKEN select 1;
-		private _operatorInfo = _operator call sqfpp_fnc_getOperatorInfo;
-		private _operatorAttributes = _operatorInfo select 3;
+        private _operatorInfo = _operator call sqfpp_fnc_getOperatorInfo;
+        private _operatorAttributes = _operatorInfo select 3;
 
-		if ("unary" in _operatorAttributes) then {
-			CONSUME();
+        if ("unary" in _operatorAttributes) then {
+            CONSUME();
 
-			switch (_operator) do {
-				case "new": {
-					private _functionCallNode = [] call sqfpp_fnc_parseFunctionCall;
-					ASSERT_DEF(_functionCallNode,"Invalid use of new");
+            switch (_operator) do {
+                case "new": {
+                    private _functionCallNode = [] call sqfpp_fnc_parseFunctionCall;
+                    ASSERT_DEF(_functionCallNode,"Invalid use of new");
 
-					private _node = ["new_instance", [_functionCallNode]] call sqfpp_fnc_createNode;
-					_node breakout "parseUnaryOperation";
-				};
-				case "delete": {
-					private _instance = [] call sqfpp_fnc_parseIdentifier;
-					ASSERT_DEF(_instance,"Invalid use of delete");
+                    private _node = ["new_instance", [_functionCallNode]] call sqfpp_fnc_createNode;
+                    _node breakout "parseUnaryOperation";
+                };
+                case "delete": {
+                    private _instance = [] call sqfpp_fnc_parseIdentifier;
+                    ASSERT_DEF(_instance,"Invalid use of delete");
 
-					private _node = ["delete_instance", [_instance]] call sqfpp_fnc_createNode;
-					_node breakout "parseUnaryOperation";
-				};
-				case "copy": {
-					private _instance = [] call sqfpp_fnc_parseIdentifier;
-					ASSERT_DEF(_instance,"Invalid use of delete");
+                    private _node = ["delete_instance", [_instance]] call sqfpp_fnc_createNode;
+                    _node breakout "parseUnaryOperation";
+                };
+                case "copy": {
+                    private _instance = [] call sqfpp_fnc_parseIdentifier;
+                    ASSERT_DEF(_instance,"Invalid use of delete");
 
-					private _node = ["copy_instance", [_instance]] call sqfpp_fnc_createNode;
-					_node breakout "parseUnaryOperation";
-				};
-				default {
-					private _expressionNode = [] call sqfpp_fnc_parseExpression;
-					if (isnil "_expressionNode") then { [format ["Unary Operator %1 is not applied to a valid expression", _operator]] call sqfpp_fnc_parseError };
+                    private _node = ["copy_instance", [_instance]] call sqfpp_fnc_createNode;
+                    _node breakout "parseUnaryOperation";
+                };
+                default {
+                    private _expressionNode = [] call sqfpp_fnc_parseExpression;
+                    if (isnil "_expressionNode") then { [format ["Unary Operator %1 is not applied to a valid expression", _operator]] call sqfpp_fnc_parseError };
 
-					private _node = ["unary_operation", [_operator,_expressionNode]] call sqfpp_fnc_createNode;
-					_node breakout "parseUnaryOperation";
-				};
-			};
-		};
+                    private _node = ["unary_operation", [_operator,_expressionNode]] call sqfpp_fnc_createNode;
+                    _node breakout "parseUnaryOperation";
+                };
+            };
+        };
     };
 };
 
@@ -1024,17 +1024,17 @@ sqfpp_fnc_parseUnaryOperation = {
 sqfpp_fnc_parseIdentifier = {
     scopename "parseIdentifier";
 
-	if (ACCEPT_SYM("var")) then {
-		CONSUME();
+    if (ACCEPT_SYM("var")) then {
+        CONSUME();
 
-		if (EXPECT_TYPE("identifier")) then {
-			private _identifierToken = CURR_TOKEN;
-			CONSUME();
+        if (EXPECT_TYPE("identifier")) then {
+            private _identifierToken = CURR_TOKEN;
+            CONSUME();
 
-			private _node = ["variable_definition", [_identifierToken]] call sqfpp_fnc_createNode;
-			_node breakout "parseIdentifier";
-		};
-	};
+            private _node = ["variable_definition", [_identifierToken]] call sqfpp_fnc_createNode;
+            _node breakout "parseIdentifier";
+        };
+    };
 
     if (ACCEPT_TYPE("identifier")) then {
         private _node = ["identifier", [CURR_TOKEN]] call sqfpp_fnc_createNode;
@@ -1202,20 +1202,20 @@ sqfpp_fnc_parseFunctionParameters = {
 
             // parse valid types for parameter
 
-			EXPECT_TYPE("identifier");
-			private _identifier = CURR_TOKEN select 1;
-			CONSUME();
+            EXPECT_TYPE("identifier");
+            private _identifier = CURR_TOKEN select 1;
+            CONSUME();
 
-			// splitString does not support whole-word delimiters
-			private _parameterTypes = [_identifier, "_or_", true] call BIS_fnc_splitstring;
-			{
-				private _parameterType = _x;
-				private _isValidType = _parameterType call sqfpp_fnc_isValidType;
+            // splitString does not support whole-word delimiters
+            private _parameterTypes = [_identifier, "_or_", true] call BIS_fnc_splitstring;
+            {
+                private _parameterType = _x;
+                private _isValidType = _parameterType call sqfpp_fnc_isValidType;
 
-				if (!_isValidType) then {
-					[format ["Invalid parameter type: %1", _parameterType]] call sqfpp_fnc_parseError;
-				};
-			} foreach _parameterTypes;
+                if (!_isValidType) then {
+                    [format ["Invalid parameter type: %1", _parameterType]] call sqfpp_fnc_parseError;
+                };
+            } foreach _parameterTypes;
 
             // parse parameter name
 
@@ -1252,7 +1252,7 @@ sqfpp_fnc_parseFunctionParameters = {
 
 
 sqfpp_fnc_parseStatement = {
-	params [["_omitSemicolon", false]];
+    params [["_omitSemicolon", false]];
 
     if (ACCEPT_TYPE("semicolon")) exitwith {
         CONSUME();
@@ -1294,15 +1294,15 @@ sqfpp_fnc_parseStatement = {
 
     _node = [] call sqfpp_fnc_parseExpression;
     if (!isnil "_node") exitwith {
-		if (!_omitSemicolon) then {
-			EXPECT_TYPE("semicolon");
-			CONSUME();
-		};
+        if (!_omitSemicolon) then {
+            EXPECT_TYPE("semicolon");
+            CONSUME();
+        };
 
-		// change this node's type so we
-		// can easily add semicolons
-		// during code generation
-		["expression_statement", _node]
+        // change this node's type so we
+        // can easily add semicolons
+        // during code generation
+        ["expression_statement", _node]
     };
 
     ["Unrecognized token while parsing statement %1", [CURR_TOKEN]] call sqfpp_fnc_parseError;

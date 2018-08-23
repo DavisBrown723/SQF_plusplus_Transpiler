@@ -63,7 +63,7 @@ sqfpp_operatorInfoMap = [
 
     ["new",     1,"right", ["unary"]],
     ["delete",  1,"right", ["unary"]],
-	["copy",    1,"right", ["unary"]]
+    ["copy",    1,"right", ["unary"]]
 ];
 
 sqfpp_fnc_getOperatorInfo = {
@@ -156,7 +156,7 @@ sqfpp_tokenToNodeMap = [
 ];
 
 sqfpp_fnc_getTokenNodeType = {
-	private _index = sqfpp_tokenToNodeMap findif {(_x select 0) == _this};
+    private _index = sqfpp_tokenToNodeMap findif {(_x select 0) == _this};
 
     if (_index != -1) then {
         (sqfpp_tokenToNodeMap select _index) select 1
