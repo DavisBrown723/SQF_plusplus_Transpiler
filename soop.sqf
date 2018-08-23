@@ -8,6 +8,7 @@ soop_fnc_getClassTemplate = {
     missionnamespace getvariable (_this call soop_fnc_stringToFullClassname);
 };
 
+// createSimpleObject ["Static", [0, 0, 0]]
 soop_fnc_createBlankObject = {
     createlocation ["CBA_NamespaceDummy", [0,0], 0, 0]
 };
@@ -103,4 +104,10 @@ soop_fnc_newInstance = {
 soop_fnc_deleteInstance = {
     {call _x} foreach (_this getvariable DESTRUCTORS_PROPERTY);
     deletelocation __instance;
+};
+
+soop_fnc_copyInstance = {
+	params ["_instance"];
+
+	_instance call soop_fnc_copyObject
 };

@@ -1,7 +1,5 @@
-scannerCreate = {
+sqfpp_fnc_scannerCreate = {
     params ["_source"];
-
-    _source = preprocessFile _source;
 
     private _sourceByChar = _source splitstring "";
     private _sourceSize = count _source;
@@ -9,7 +7,7 @@ scannerCreate = {
     [_sourceByChar,_sourceSize,0];
 };
 
-scannerPeek = {
+sqfpp_fnc_scannerPeek = {
     params ["_scanner",["_distance",1]];
 
     _scanner params ["_chars","_charCount","_nextCharIndex"];
@@ -23,7 +21,7 @@ scannerPeek = {
     };
 };
 
-scannerNext = {
+sqfpp_fnc_scannerNext = {
     private _scanner = _this;
 
     _scanner params ["_chars","_charCount","_nextCharIndex"];
@@ -36,5 +34,3 @@ scannerNext = {
         "eof"
     };
 };
-
-stringToNum = { (toarray _this) select 0 };
