@@ -381,6 +381,11 @@ sqfpp_fnc_createNode = {
 
             [_type,_expression]
         };
+        case "unnamed_scope": {
+            _properties params ["_block",["_forceUnscheduled",false]];
+
+            [_type,_block,_forceUnscheduled]
+        };
         case "break": {
             ["break"]
         };
@@ -839,6 +844,26 @@ sqfpp_fnc_parseClassDefinition = {
 };
 
 
+sqfpp_fnc_parseUnnamedBlock = {
+    scopename "parseUnnamedBlock";
+
+    private _forceUnscheduled = false;
+    if (ACCEPT_SYM("unscheduled")) then {
+        CONSUME();
+
+        _forceUnscheduled = true;
+    };
+
+    private _blockNode = call sqfpp_fnc_parseBlock;
+    if (!isnil "_blockNode") then {
+        ["unnamed_scope", [_blockNode,_forceUnscheduled]] call sqfpp_fnc_createNode;
+    } else {
+        if (_forceUnscheduled) then { BACKTRACK() };
+    };
+
+};
+
+
 sqfpp_fnc_parseLiteral = {
     scopename "parseLiteral";
 
@@ -1286,11 +1311,8 @@ sqfpp_fnc_parseStatement = {
     _node = call sqfpp_fnc_parseClassDefinition;
     if (!isnil "_node") exitwith {_node};
 
-    // unnamed scope
-    _node = call sqfpp_fnc_parseBlock;
-    if (!isnil "_node") exitwith {
-        ["unnamed_scope", _node]
-    };
+    _node = call sqfpp_fnc_parseUnnamedBlock;
+    if (!isnil "_node") exitwith {_node};
 
     _node = [] call sqfpp_fnc_parseExpression;
     if (!isnil "_node") exitwith {

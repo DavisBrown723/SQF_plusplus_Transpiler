@@ -218,7 +218,10 @@ sqfpp_fnc_visitNode = {
             } foreach _funcNodes;
         };
         case "unnamed_scope": {
+            private _block = _node select 1;
+            private _forceUnscheduled = _node select 2;
 
+            VISIT(_block);
         };
         case "return": {
             private _expression = _node select 1;

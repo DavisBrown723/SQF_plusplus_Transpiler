@@ -384,9 +384,15 @@ sqfpp_fnc_translateNode = {
 
         case "unnamed_scope": {
             private _block = _node select 1;
+            private _forceUnscheduled = _node select 2;
 
-            private _code = "call {" + (_block call sqfpp_fnc_translateNode) + "};";
-            _code breakout "translateNode";
+            if (_forceUnscheduled) then {
+                private _code = "{" + (_block call sqfpp_fnc_translateNode) + "} call sqfpp_fnc_forceUnscheduled;";
+                _code breakout "translateNode";
+            } else {
+                private _code = "call {" + (_block call sqfpp_fnc_translateNode) + "};";
+                _code breakout "translateNode";
+            };
         };
 
         case "lambda": {
