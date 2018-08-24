@@ -109,5 +109,8 @@ soop_fnc_deleteInstance = {
 soop_fnc_copyInstance = {
     params ["_instance"];
 
-    _instance call soop_fnc_copyObject
+    private _newInstance = _instance call soop_fnc_copyObject;
+    [_newInstance,_instance] call (_newInstance getvariable "copy_constructor");
+
+    _newInstance
 };

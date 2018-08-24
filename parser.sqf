@@ -542,8 +542,19 @@ sqfpp_fnc_parseIfStatement = {
                     if (ACCEPT_SYM("{")) then {
                         _falseBlock = call sqfpp_fnc_parseBlock;
                     } else {
-                        private _statement = [] call sqfpp_fnc_parseStatement;
-                        _falseBlock = ["block", [[_statement]]] call sqfpp_fnc_createNode;
+                        // check for elseif
+
+                        if (ACCEPT_SYM("if")) then {
+                            // parse another if statement
+                            // insert into false block
+
+                            private _ifNode = call sqfpp_fnc_parseIfStatement;
+                            _falseBlock = ["block", [[_ifNode]]] call sqfpp_fnc_createNode;
+                        } else {
+                            // parse single-statement for else block
+                            private _statement = [] call sqfpp_fnc_parseStatement;
+                            _falseBlock = ["block", [[_statement]]] call sqfpp_fnc_createNode;
+                        };
                     };
                 };
 
