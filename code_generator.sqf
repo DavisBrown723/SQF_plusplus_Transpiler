@@ -207,7 +207,15 @@ sqfpp_fnc_translateNode = {
             private _operatorInfo = _operator call sqfpp_fnc_getOperatorInfo;
             private _operatorAttributes = _operatorInfo select 3;
 
-            private _code = format ["(%1 %2 %3)", _left call sqfpp_fnc_translateNode, _operator, _right call sqfpp_fnc_translateNode];
+            private _code = switch (_operator) do {
+                case "&&";
+                case "||": {
+                    format ["(%1 %2 { %3 })", _left call sqfpp_fnc_translateNode, _operator, _right call sqfpp_fnc_translateNode];
+                };
+                default {
+                    format ["(%1 %2 %3)", _left call sqfpp_fnc_translateNode, _operator, _right call sqfpp_fnc_translateNode];
+                };
+            };
 
             _code breakout "translateNode";
         };
