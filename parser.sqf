@@ -835,6 +835,49 @@ sqfpp_fnc_parseClassDefinition = {
 
                 CONSUME();
 
+                // verify that special functions have appropriate parameter lists
+
+                {
+                    _x params ["_functionName","_functionParameters"];
+
+                    switch (_functionName) do {
+                        case "constructor": {
+                            // we should have only one parameter
+                            private _multipleParameters = (count _functionParameters) > 1;
+
+                            if (_multipleParameters) then {
+                                [format ["Class %1 definition constructor has too many arguments", _classname]] call sqfpp_fnc_parseError;
+                            };
+                        };
+                        case "destructor": {
+                            // we should have only one parameter
+                            private _multipleParameters = (count _functionParameters) > 1;
+
+                            if (_multipleParameters) then {
+                                [format ["Class %1 definition destructor has too many arguments", _classname]] call sqfpp_fnc_parseError;
+                            };
+                        };
+                        case "copy_constructor": {
+                            // we should have only one parameter - of type Class
+                            private _parameterCount = count _functionParameters;
+
+                            if (_parameterCount == 1) then {
+                                [format ["Class %1 copy_constructor definition has no arguments: expecting Class parameter", _classname]] call sqfpp_fnc_parseError;
+                            };
+                            if (_parameterCount > 2) then {
+                                [format ["Class %1 copy_constructor definition has too many arguments", _classname]] call sqfpp_fnc_parseError;
+                            };
+
+                            private _firstParameter = _functionParameters select 1;
+                            private _firstParameterTypes = _firstParameter select 1;
+
+                            if !(_firstParameterTypes isequalto ["Class"]) then {
+                                [format ["Class %1 copy_constructor definition has improper parameter types %2 : expecting Class", _classname, _firstParameterTypes]] call sqfpp_fnc_parseError;
+                            };
+                        };
+                    };
+                } foreach _funcs;
+
                 private _classNode = ["class_definition", [_classname,_parentClassnames,_vars,_funcs]] call sqfpp_fnc_createNode;
 
                 _classNode breakout "parseClassDefinition";

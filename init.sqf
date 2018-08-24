@@ -40,6 +40,16 @@ sqfpp_sqfCommandsByType = call {
     _commandsByTypeParsed
 };
 
+// helper functions
+
+sqfpp_fnc_forceUnscheduled = {
+    private "_result";
+    isnil { _result = call _this };
+
+    _result
+};
+
+
 tokens = (preprocessFile "source.sqf++") call sqfpp_fnc_lex;
 //parsed = "source.sqf++" call sqfpp_fnc_parse;
 translated = ["source.sqf++", false] call sqfpp_fnc_compileFile;
