@@ -164,7 +164,7 @@ sqfpp_fnc_visitNode = {
             private _object = _node select 1;
             private _member = _node select 2;
 
-            //VISIT(_object);
+            VISIT(_object);
             VISIT(_member);
         };
         case "lambda": {
@@ -262,40 +262,33 @@ sqfpp_fnc_transformClassSelfReferences = {
             switch (_state) do {
                 case "entered": {
                     _visitor setvariable ["inClassDef", true];
+
+                    _node params ["_type","_classname","_parents","_varNodes","_funcNodes"];
+
+                    // manually visit function nodes so
+                    // we know when we're inside one
+                    {
+                        _x params ["_name","_parameters","_body"];
+
+                        _visitor setVariable ["inClassMethod", true];
+                        VISIT(_body);
+                        _visitor setVariable ["inClassMethod", false];
+                    } foreach _funcNodes;
                 };
                 case "leaving": {
                     _visitor setvariable ["inClassDef", false];
                 };
             };
         }],
-        ["named_function", {
-            params ["_node","_visitor","_state"];
-
-            private _inClassDef = _visitor getvariable ["inClassDef", false];
-            if (_inClassDef) then {
-                // use count instead of bool
-                // to support functions inside of functions
-
-                private _inClassFuncDefCount = _visitor getvariable ["inClassFunctionDefCount", 0];
-
-                switch (_state) do {
-                    case "entered": {
-                        _visitor setvariable ["inClassFunctionDefCount", _inClassFuncDefCount + 1];
-                    };
-                    case "leaving": {
-                        _visitor setvariable ["inClassFunctionDefCount", _inClassFuncDefCount - 1];
-                    };
-                };
-            };
-        }],
         ["identifier", {
             params ["_node","_visitor","_state"];
 
-            private _inFunctionCount = _visitor getvariable ["inClassFunctionDefCount", 0];
+            private _inClassMethod = _visitor getvariable ["inClassMethod", false];
 
-            // compare to 1
-            // to remove support for nested functions
-            if (_inFunctionCount > 0) then {
+            if (isnil "checkarray") then {checkarray = []};
+            checkarray pushback [_node select 1,_inClassMethod];
+
+            if (_inClassMethod) then {
                 private _content = _node select 1;
 
                 if (_content == "this") then {
@@ -390,48 +383,56 @@ sqfpp_fnc_transformClassMemberAccess = {
                 _visitor setVariable ["currentMethod", nil];
             } foreach _funcNodes;
         }],
-        ["assignment", {
+        ["variable_definition", {
             params ["_node","_visitor","_state"];
 
+            if (_state != "entered") exitwith {};
+
+            private _currentMethod = _visitor getvariable "currentMethod";
+            if (isnil "_currentMethod") exitwith {};
+
+            private _varToken = _node select 1;
+            private _varName = _varToken select 1;
+
             private _restrictedVars = _visitor getvariable "restrictedVars";
-            if (isnil "_restrictedVars") exitwith {};
+            _restrictedVars pushbackunique _varName;
+        }],
+        ["named_function", {
+            params ["_node","_visitor","_state"];
 
-            _node params ["_nodeType","_nodeLHS","_nodeOperator","_nodeRHS"];
+            if (_state != "entered") exitwith {};
 
-            // #TODO: verify 1 is correct index
-            private _assignedVar = _nodeLHS select 1;
-            _restrictedVars pushbackunique _assignedVar;
+            private _currentMethod = _visitor getvariable "currentMethod";
+            if (isnil "_currentMethod") exitwith {};
+
+            private _definedFunctionName = _node select 1;
+
+            private _restrictedVars = _visitor getvariable "restrictedVars";
+            _restrictedVars pushbackunique _definedFunctionName;
         }],
         ["function_call", {
             params ["_node","_visitor","_state"];
 
             if (_state != "leaving") exitwith {};
 
-            private _functionName = _node select 1;
             private _currentMethod = _visitor getvariable ["currentMethod",""];
+            if (isnil "_currentMethod") exitwith {};
 
-            if (_currentMethod != _functionName) exitwith {};
+            private _functionName = _node select 1;
 
             private _restrictedVars = _visitor getvariable "restrictedVars";
             private _classMethods = _visitor getvariable "memberFuncs";
+            private _classMemberVars = _visitor getvariable "memberVars";
 
-            private _varIsRestricted = (_functionName in _restrictedVars) || { _functionName in _classMethods };
+            private _varIsRestricted = _functionName in _restrictedVars;
+            private _varIsMember = _functionName in _classMethods || { _functionName in _classMemberVars };
 
-            if (!_varIsRestricted) then {
+            if (!_varIsRestricted && _varIsMember) then {
                 // transform function call into method call
 
                 private _instanceVar = ["identifier", [ ["identifier","this"] ]] call sqfpp_fnc_createNode;
                 private _methodName = _node select 1;
                 private _methodArgs = _node select 2;
-
-                /*
-                [
-                    "method_call",
-                    ["identifier","this",[]],
-                    "varname",
-                    []
-                ]
-                */
 
                 _node set [0, "method_call"];
                 _node set [1, _instanceVar];
@@ -452,9 +453,10 @@ sqfpp_fnc_transformClassMemberAccess = {
             private _restrictedVars = _visitor getvariable "restrictedVars";
             private _classMemberVars = _visitor getvariable "memberVars";
 
-            private _varIsRestricted = (_varName in _restrictedVars) || { _varName in _classMemberVars };
+            private _varIsRestricted = _varName in _restrictedVars;
+            private _varIsMember = _varName in _classMemberVars;
 
-            if (!_varIsRestricted) then {
+            if (!_varIsRestricted && _varIsMember) then {
                 // transform _node into class access
                 private _instanceVar = ["identifier", [ ["identifier","this"] ]] call sqfpp_fnc_createNode;
                 private _varIdentifier = +_node;
