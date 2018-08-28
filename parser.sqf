@@ -100,7 +100,7 @@ sqfpp_fnc_parserErrorUI = {
         };
 
         private _contextLines = [[],[],[],[],[]];
-        private _typesToIgnore = ["end_line","end_of_file"];
+        //private _typesToIgnore = ["end_line","end_of_file"];
 
         {
             private _token = _x;
@@ -108,10 +108,10 @@ sqfpp_fnc_parserErrorUI = {
             _tokenLocation params ["_line","_column"];
 
             if (_line >= _minLine && _line <= _maxLine) then {
-                if !(_tokenType in _typesToIgnore) then {
+               //if !(_tokenType in _typesToIgnore) then {
                     private _contextLine = _line - _minLine;
                     (_contextLines select _contextLine) pushback [_tokenContent,_column];
-                };
+                //};
             };
         } foreach _tokens;
 
@@ -314,14 +314,22 @@ sqfpp_fnc_createNode = {
             [_type,_class,_arguments]
         };
         case "delete_instance": {
-            _properties params ["_instance"];
+            _properties params ["_expression"];
 
-            [_type,_instance]
+            [_type,_expression]
         };
-        case "copy_instance": {
-            _properties params ["_instance"];
+        case "copy_variable": {
+            _properties params ["_expression"];
 
-            [_type,_instance]
+            [_type,_expression]
+        };
+        case "init_parent_class": {
+            _properties params ["_functionCallNode"];
+
+            private _class = _functionCallNode select 1;
+            private _arguments = _functionCallNode select 2;
+
+            [_type,_class,_arguments]
         };
         case "binary_operation": {
             _properties params ["_operator","_left","_right"];
@@ -418,6 +426,8 @@ sqfpp_fnc_parse = {
     private _parsingContext = "";
     private _astNodes = [];
 
+    private _ast = ["block", [_astNodes]] call sqfpp_fnc_createNode;
+
     if (_tokenCount > 0) then {
 
         scopename "ast_generation";
@@ -437,15 +447,15 @@ sqfpp_fnc_parse = {
             _astNodes pushback _node;
         };
 
+        // transformations
+
+        _ast call sqfpp_fnc_checkTreeValidity;
+
+        _ast call sqfpp_fnc_transformContinuedLoops;
+        _ast call sqfpp_fnc_transformClassMemberAccess;
+        _ast call sqfpp_fnc_transformClassSelfReferences;
+
     };
-
-    private _ast = ["block", [_astNodes]] call sqfpp_fnc_createNode;
-
-    // transformations
-
-    _ast call sqfpp_fnc_transformContinuedLoops;
-    _ast call sqfpp_fnc_transformClassMemberAccess;
-    _ast call sqfpp_fnc_transformClassSelfReferences;
 
     _ast
 };
@@ -1074,17 +1084,24 @@ sqfpp_fnc_parseUnaryOperation = {
                     _node breakout "parseUnaryOperation";
                 };
                 case "delete": {
-                    private _instance = [] call sqfpp_fnc_parseIdentifier;
-                    ASSERT_DEF(_instance,"Invalid use of delete");
+                    private _expression = [] call sqfpp_fnc_parseExpression;
+                    ASSERT_DEF(_expression,"delete: expected an expression");
 
-                    private _node = ["delete_instance", [_instance]] call sqfpp_fnc_createNode;
+                    private _node = ["delete_instance", [_expression]] call sqfpp_fnc_createNode;
                     _node breakout "parseUnaryOperation";
                 };
                 case "copy": {
-                    private _instance = [] call sqfpp_fnc_parseIdentifier;
-                    ASSERT_DEF(_instance,"Invalid use of delete");
+                    private _expression = [] call sqfpp_fnc_parseExpression;
+                    ASSERT_DEF(_expression,"copy: expected an expression");
 
-                    private _node = ["copy_instance", [_instance]] call sqfpp_fnc_createNode;
+                    private _node = ["copy_variable", [_expression]] call sqfpp_fnc_createNode;
+                    _node breakout "parseUnaryOperation";
+                };
+                case "init_super": {
+                    private _expression = [] call sqfpp_fnc_parseExpression;
+                    ASSERT_DEF(_expression,"init_super: expected an expression");
+
+                    private _node = ["init_parent_class", [_expression]] call sqfpp_fnc_createNode;
                     _node breakout "parseUnaryOperation";
                 };
                 default {

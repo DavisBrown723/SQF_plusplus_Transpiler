@@ -3,6 +3,9 @@
 #define DESTRUCTORS_PROPERTY    "sqfpp__DESTRUCTORS"
 #define VARIABLES_PROPERTY      "sqfpp__VARIABLES"
 #define METHODS_PROPERTY        "sqfpp__METHODS"
+#define IS_CLASS_PROPERTY       "sqfpp__isClass"
+
+#define IS_CLASS(var)           (if (var isequaltype locationnull && {var getvariable [IS_CLASS_PROPERTY, false]}) then {true} else {false})
 
 soop_fnc_getClassTemplate = {
     missionnamespace getvariable (_this call soop_fnc_stringToFullClassname);
@@ -47,12 +50,13 @@ soop_fnc_compileClass = {
     private _newParentList = +_parentList;
     _parentList pushback (_template call soop_fnc_copyObject);
 
+    private _methodsToSkip = ["constructor","copy_constructor"];
     {
         private _parent = _x;
 
         // handle variable/method inheritance
         { _template setvariable [_x,_parent getvariable _x] } foreach (_parent getvariable VARIABLES_PROPERTY);
-        { _template setvariable [_x,_parent getvariable _x] } foreach (_parent getvariable METHODS_PROPERTY);
+        { if !(_x in _methodsToSkip) then {_template setvariable [_x,_parent getvariable _x] }} foreach (_parent getvariable METHODS_PROPERTY);
 
         if ((_parent getvariable CLASSNAME_PROPERTY) != (_template getvariable CLASSNAME_PROPERTY)) then {
             _newParentList append (_parent getvariable PARENTS_PROPERTY);
@@ -104,6 +108,14 @@ soop_fnc_newInstance = {
 soop_fnc_deleteInstance = {
     {call _x} foreach (_this getvariable DESTRUCTORS_PROPERTY);
     deletelocation __instance;
+};
+
+soop_fnc_copyVariable = {
+    if (IS_CLASS(_this)) then {
+        [_this] call soop_fnc_copyInstance
+    } else {
+        +_this
+    };
 };
 
 soop_fnc_copyInstance = {

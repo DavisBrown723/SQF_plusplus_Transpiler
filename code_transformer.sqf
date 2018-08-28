@@ -119,14 +119,21 @@ sqfpp_fnc_visitNode = {
             { VISIT(_x) } foreach _arguments;
         };
         case "delete_instance": {
-            private _instance = _node select 1;
+            private _expression = _node select 1;
 
-            VISIT(_instance);
+            VISIT(_expression);
         };
-        case "copy_instance": {
-            private _instance = _node select 1;
+        case "copy_variable": {
+            private _expression = _node select 1;
 
-            VISIT(_instance);
+            VISIT(_expression);
+        };
+        case "init_parent_class": {
+            private _class = _node select 1;
+            private _arguments = _node select 2;
+
+            //VISIT(_class);
+            { VISIT(_x) } foreach _arguments;
         };
         case "unary_statement": {
             private _symbol = _node select 1;
@@ -247,6 +254,64 @@ sqfpp_fnc_visitNode = {
 // common transformations
 
 
+sqfpp_fnc_checkTreeValidity = {
+    private _tree = _this;
+
+    _tree call sqfpp_fnc_checkParentClassInits;
+};
+
+sqfpp_fnc_checkParentClassInits = {
+    private _tree = _this;
+
+    [_tree,[
+        ["class_definition", {
+            params ["_node","_visitor","_state"];
+
+            private _inClassDef = _visitor getvariable ["inClassDef", false];
+
+            switch (_state) do {
+                case "entered": {
+                    _visitor setvariable ["inClassDef", true];
+
+                    _node params ["_type","_classname","_parents","_varNodes","_funcNodes"];
+
+                    _visitor setVariable ["class", _classname];
+                    _visitor setVariable ["classParents", _parents];
+
+                    // manually visit function nodes so
+                    // we know when we're inside one
+                    {
+                        _x params ["_name","_parameters","_body"];
+
+                        VISIT(_body);
+                    } foreach _funcNodes;
+                };
+                case "leaving": {
+                    _visitor setvariable ["inClassDef", false];
+                };
+            };
+        }],
+        ["init_parent_class", {
+            params ["_node","_visitor","_state"];
+
+            private _inClass = _visitor getvariable ["inClassDef", false];
+
+            if (!_inClass) then {
+                ["init_super must be used inside of a class method"] call sqfpp_fnc_parseError;
+            };
+
+            private _classToInit = _node select 1;
+            private _currentClass = _visitor getVariable "class";
+            private _validParents = _visitor getVariable "classParents";
+
+            if !(_classToInit in _validParents) then {
+                [format ["init_super class %1 does not inherit from %2", _currentClass, _classToInit]] call sqfpp_fnc_parseError;
+            };
+        }]
+    ]] call sqfpp_fnc_transform;
+};
+
+
 // we can also abuse scope bleed here
 // any var defined in class_def will remain defined for the other two node types if valid
 // and will go out of scope once the class_def node is left
@@ -284,9 +349,6 @@ sqfpp_fnc_transformClassSelfReferences = {
             params ["_node","_visitor","_state"];
 
             private _inClassMethod = _visitor getvariable ["inClassMethod", false];
-
-            if (isnil "checkarray") then {checkarray = []};
-            checkarray pushback [_node select 1,_inClassMethod];
 
             if (_inClassMethod) then {
                 private _content = _node select 1;

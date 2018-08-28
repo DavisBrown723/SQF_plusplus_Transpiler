@@ -61,9 +61,10 @@ sqfpp_operatorInfoMap = [
     ["<<", 2,"right", ["binary"]],
     [">>", 2,"right", ["binary"]],
 
-    ["new",     1,"right", ["unary"]],
-    ["delete",  1,"right", ["unary"]],
-    ["copy",    1,"right", ["unary"]]
+    ["new",         1,"right", ["unary"]],
+    ["delete",      1,"right", ["unary"]],
+    ["copy",        1,"right", ["unary"]],
+    ["init_super",  1,"right", ["unary"]]
 ];
 
 sqfpp_fnc_getOperatorInfo = {

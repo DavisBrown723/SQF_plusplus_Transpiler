@@ -35,11 +35,13 @@ sqfpp_fnc_loadClassFile = {
 
 
 sqfpp_fnc_parameterListToString = {
+    private _parameters = _this;
+
     private _parameterString = "";
     {
         if (_foreachindex > 0) then {_parameterString = _parameterString + ","};
         _parameterString = _parameterString + (_x call sqfpp_fnc_translateNode);
-    } foreach _this;
+    } foreach _parameters;
 
     _parameterString
 };
@@ -49,6 +51,11 @@ sqfpp_fnc_parameterListToString = {
 
 sqfpp_fnc_translateNode = {
     scopename "translateNode";
+
+    // prints call chain
+    //if (isnil "sqfpp_codegen_generated") then {sqfpp_codegen_generated = []};
+    //sqfpp_codegen_generated pushback _this;
+    //copytoclipboard str sqfpp_codegen_generated;
 
     private _node = _this;
     private _nodeType = _node select 0;
@@ -491,24 +498,38 @@ sqfpp_fnc_translateNode = {
             private _class = _node select 1;
             private _arguments = _node select 2;
 
-            _arguments = _arguments apply {_x call sqfpp_fnc_translateNode};
-            _arguments = "[" + (_arguments joinstring ",") + "]";
+            //_arguments = _arguments apply {_x call sqfpp_fnc_translateNode};
+            //_arguments = "[" + (_arguments joinstring ",") + "]";
 
-            private _code = format ["(['%1',%2] call soop_fnc_newInstance)", _class, _arguments];
+            private _argumentsString = _arguments call call sqfpp_fnc_parameterListToString;
+
+            private _code = format ["(['%1',%2] call soop_fnc_newInstance)", _class, _argumentsString];
             _code breakout "translateNode";
         };
 
         case "delete_instance": {
-            private _instance = _node select 1;
+            private _expression = _node select 1;
 
-            private _code = format ["(%1 call soop_fnc_deleteInstance)", _instance call sqfpp_fnc_translateNode];
+            private _code = format ["(%1 call soop_fnc_deleteInstance)", _expression call sqfpp_fnc_translateNode];
             _code breakout "translateNode";
         };
-        case "copy_instance": {
-            private _instance = _node select 1;
+        case "copy_variable": {
+            private _expression = _node select 1;
 
-            private _code = format ["(%1 call soop_fnc_copyInstance)", _instance call sqfpp_fnc_translateNode];
+            private _code = format ["(%1 call soop_fnc_copyVariable)", _expression call sqfpp_fnc_translateNode];
             _code breakout "translateNode";
+        };
+        case "init_parent_class": {
+            private _class = _node select 1;
+            private _arguments = _node select 2;
+
+            private _argumentsString = _arguments call sqfpp_fnc_parameterListToString;
+
+            private _code = format ["([this, %1, %2] call soop_fnc_initParentClass)", _class, _argumentsString];
+            _code breakout "translateNode";
+        };
+        case "empty_statement": {
+            ";" breakout "translateNode";
         };
 
     };
