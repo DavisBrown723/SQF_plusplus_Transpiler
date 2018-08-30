@@ -472,6 +472,36 @@ sqfpp_fnc_transformClassMemberAccess = {
             private _restrictedVars = _visitor getvariable "restrictedVars";
             _restrictedVars pushbackunique _definedFunctionName;
         }],
+        ["class_access", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _currentMethod = _visitor getvariable "currentMethod";
+            if (isnil "_currentMethod") exitwith {};
+
+            private _object = _node select 1;
+            private _objectString = _object select 1;
+
+            if (_objectString == "this") then {
+                _visitor setvariable ["ignoreNextThis", true];
+            };
+        }],
+        ["method_call", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _currentMethod = _visitor getvariable "currentMethod";
+            if (isnil "_currentMethod") exitwith {};
+
+            private _object = _node select 1;
+            private _objectString = _object select 1;
+
+            if (_objectString == "this") then {
+                _visitor setvariable ["ignoreNextThis", true];
+            };
+        }],
         ["function_call", {
             params ["_node","_visitor","_state"];
 
@@ -490,6 +520,9 @@ sqfpp_fnc_transformClassMemberAccess = {
             private _varIsMember = _functionName in _classMethods || { _functionName in _classMemberVars };
 
             if (!_varIsRestricted && _varIsMember) then {
+                private _ignoreNextThis = _visitor getvariable ["ignoreNextThis", false];
+                if (_ignoreNextThis) exitwith { _visitor setvariable ["ignoreNextThis", false] };
+
                 // transform function call into method call
 
                 private _instanceVar = ["identifier", [ ["identifier","this"] ]] call sqfpp_fnc_createNode;
@@ -519,6 +552,9 @@ sqfpp_fnc_transformClassMemberAccess = {
             private _varIsMember = _varName in _classMemberVars;
 
             if (!_varIsRestricted && _varIsMember) then {
+                private _ignoreNextThis = _visitor getvariable ["ignoreNextThis", false];
+                if (_ignoreNextThis) exitwith { _visitor setvariable ["ignoreNextThis", false] };
+
                 // transform _node into class access
                 private _instanceVar = ["identifier", [ ["identifier","this"] ]] call sqfpp_fnc_createNode;
                 private _varIdentifier = +_node;
