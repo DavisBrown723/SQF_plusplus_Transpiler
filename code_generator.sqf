@@ -22,7 +22,7 @@ sqfpp_fnc_compileFile = {
 };
 
 sqfpp_fnc_loadClassFile = {
-    params ["_file"];
+    params ["_file", ["_compile", true]];
 
     private _sourceText = preprocessFile _file;
 
