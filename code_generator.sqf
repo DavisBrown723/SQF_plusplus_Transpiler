@@ -3,10 +3,6 @@ sqfpp_fnc_compile = {
 
     private _ast = _sourceText call sqfpp_fnc_parse;
 
-    // #TODO
-    parsed = _ast;
-
-
     private _code = _ast call sqfpp_fnc_translateNode;
     _code = format ["scopename '___functionScope___'; %1", _code];
 
@@ -467,26 +463,30 @@ sqfpp_fnc_translateNode = {
             _code = _code + "private _parents = [";
             if !(_parents isequalto []) then {
                 {
-                    if (_foreachindex != 0) then {_code = _code + ","};
+                    if (_foreachindex > 0) then { _code = _code + "," };
                     _code = _code + (str _x);
                 } foreach _parents;
             };
             _code = _code + "];";
 
-            _code = _code + "private _classVariables = [];";
+            _code = _code + "private _classVariables = [";
             {
-                _code = _code + (format ["_classVariables pushback ['%1',%2];", _x select 0, (_x select 1) call sqfpp_fnc_translateNode]);
+                if (_foreachindex > 0) then { _code = _code + "," };
+                _code = _code + (format ["['%1',%2]", _x select 0, (_x select 1) call sqfpp_fnc_translateNode]);
             } foreach _variables;
+            _code = _code + "];";
 
-            _code = _code + "private _classMethods = [];";
+            _code = _code + "private _classMethods = [";
             {
                 _x params ["_name","_parameters","_body"];
 
                 private _parameterString = _parameters call sqfpp_fnc_parameterListToString;
                 private _paramsString = if (_parameterString == "") then {""} else {format ["params [%1];", _parameterString]};
 
-                _code = _code + (format ["_classMethods pushback ['%1',{scopename '___functionScope___'; %2 %3}];", _name, _paramsString, _body call sqfpp_fnc_translateNode]);
+                if (_foreachindex > 0) then { _code = _code + "," };
+                _code = _code + (format ["['%1',{scopename '___functionScope___'; %2 %3}]", _name, _paramsString, _body call sqfpp_fnc_translateNode]);
             } foreach _functions;
+            _code = _code + "];";
 
             _code = _code + "[_classname,_parents,_classVariables,_classMethods] call soop_fnc_defineClass";
 
@@ -498,12 +498,9 @@ sqfpp_fnc_translateNode = {
             private _class = _node select 1;
             private _arguments = _node select 2;
 
-            //_arguments = _arguments apply {_x call sqfpp_fnc_translateNode};
-            //_arguments = "[" + (_arguments joinstring ",") + "]";
+            private _argumentsString = _arguments call sqfpp_fnc_parameterListToString;
 
-            private _argumentsString = _arguments call call sqfpp_fnc_parameterListToString;
-
-            private _code = format ["(['%1',%2] call soop_fnc_newInstance)", _class, _argumentsString];
+            private _code = format ["(['%1', [%2]] call soop_fnc_newInstance)", _class, _argumentsString];
             _code breakout "translateNode";
         };
 
@@ -520,12 +517,12 @@ sqfpp_fnc_translateNode = {
             _code breakout "translateNode";
         };
         case "init_parent_class": {
-            private _class = _node select 1;
+            private _parentClass = _node select 1;
             private _arguments = _node select 2;
 
             private _argumentsString = _arguments call sqfpp_fnc_parameterListToString;
 
-            private _code = format ["([this, %1, %2] call soop_fnc_initParentClass)", _class, _argumentsString];
+            private _code = format ["([__sqfpp_this, '%1', [%2]] call soop_fnc_initParentClass)", _parentClass call sqfpp_fnc_translateNode, _argumentsString];
             _code breakout "translateNode";
         };
         case "empty_statement": {
