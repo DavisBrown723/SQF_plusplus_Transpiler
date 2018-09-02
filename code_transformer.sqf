@@ -132,7 +132,7 @@ sqfpp_fnc_visitNode = {
             private _class = _node select 1;
             private _arguments = _node select 2;
 
-            //VISIT(_class);
+            VISIT(_class);
             { VISIT(_x) } foreach _arguments;
         };
         case "unary_statement": {
@@ -254,6 +254,28 @@ sqfpp_fnc_visitNode = {
 // common transformations
 
 
+sqfpp_fnc_precompileClasses = {
+    private _tree = _this;
+
+    [_tree,[
+        ["class_definition", {
+            params ["_node","_visitor","_state"];
+
+            private _inClassDef = _visitor getvariable ["inClassDef", false];
+
+            if (_state == "entered") then {
+                _node params ["_type","_classname","_parents","_varNodes","_funcNodes"];
+
+                private _varList = _varNodes apply {_x select 0};
+                private _methodList = _funcNodes apply {_x select 0};
+
+                [_classname,_parents,_varList,_methodList] call soop_fnc_handleClassPrecompile;
+            };
+        }]
+    ]] call sqfpp_fnc_transform;
+};
+
+
 sqfpp_fnc_checkTreeValidity = {
     private _tree = _this;
 
@@ -300,7 +322,9 @@ sqfpp_fnc_checkParentClassInits = {
                 ["init_super must be used inside of a class method"] call sqfpp_fnc_parseError;
             };
 
-            private _classToInit = _node select 1;
+            private _classToInitToken = _node select 1;
+            private _classToInit = _classToInitToken select 1;
+
             private _currentClass = _visitor getVariable "class";
             private _validParents = _visitor getVariable "classParents";
 
@@ -426,10 +450,11 @@ sqfpp_fnc_transformClassMemberAccess = {
 
             _node params ["_type","_classname","_parents","_varNodes","_funcNodes"];
 
-            private _classVars = _varNodes apply {_x select 0};
-            private _classMethods = _funcNodes apply {_x select 0};
+            private _classTemplate = _classname call soop_fnc_getClassTemplate;
+            private _classVariables = _classTemplate getvariable "sqfpp__VARIABLES";
+            private _classMethods = _classTemplate getvariable "sqfpp__METHODS";
 
-            _visitor setvariable ["memberVars", _classVars];
+            _visitor setvariable ["memberVars", _classVariables];
             _visitor setvariable ["memberFuncs", _classMethods];
 
             // manually visit nodes to more easily

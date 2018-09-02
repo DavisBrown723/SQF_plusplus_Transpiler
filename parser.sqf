@@ -329,6 +329,10 @@ sqfpp_fnc_createNode = {
             private _class = _functionCallNode select 1;
             private _arguments = _functionCallNode select 2;
 
+            // create token from class name
+            // #todo: function_Call should use token for name
+            _class = ["identifier", [ ["identifier", _class] ]] call sqfpp_fnc_createNode;
+
             [_type,_class,_arguments]
         };
         case "binary_operation": {
@@ -449,6 +453,7 @@ sqfpp_fnc_parse = {
 
         // transformations
 
+        _ast call sqfpp_fnc_precompileClasses;
         _ast call sqfpp_fnc_checkTreeValidity;
 
         _ast call sqfpp_fnc_transformContinuedLoops;
