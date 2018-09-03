@@ -33,6 +33,93 @@ sqfpp_fnc_visitNode = {
     } foreach _transformations;
 
     switch (_nodeType) do {
+        case "identifier": {
+
+        };
+        case "literal": {
+            // visit array literal elements?
+        };
+        case "namespace_accessor": {
+            private _left = _node select 1;
+            private _right = _node select 2;
+
+            VISIT(_left);
+            VISIT(_right);
+        };
+        case "namespace_block": {
+            private _namespace = _node select 1;
+            private _blockNodes = _node select 2;
+
+            { VISIT(_x) } foreach _blockNodes;
+        };
+        case "block": {
+            private _statementList = _node select 1;
+
+            { VISIT(_x) } foreach _statementList;
+        };
+        case "expression_statement": {
+            private _statement = _node select 1;
+
+            VISIT(_statement);
+        };
+        case "variable_definition": {
+            private _varIdentifierToken = _node select 1;
+
+            VISIT(_varIdentifierToken);
+        };
+        case "assignment": {
+            private _left = _node select 1;
+            private _operator = _node select 2;
+            private _right = _node select 3;
+
+            VISIT(_left);
+            VISIT(_right);
+        };
+        case "unary_operation": {
+            private _operator = _node select 1;
+            private _right = _node select 2;
+
+            VISIT(_right);
+        };
+        case "unary_statement": {
+            private _symbol = _node select 1;
+            private _right = _node select 2;
+
+            VISIT(_symbol);
+            VISIT(_right);
+        };
+        case "binary_operation": {
+            private _operator = _node select 1;
+            private _left = _node select 2;
+            private _right = _node select 3;
+
+            VISIT(_left);
+            VISIT(_right);
+        };
+        case "function_call": {
+            private _function = _node select 1;
+            private _arguments = _node select 2;
+
+            { VISIT(_x) } foreach _arguments;
+        };
+        case "method_call": {
+            private _object = _node select 1;
+            private _method = _node select 2;
+            private _arguments = _node select 3;
+
+            VISIT(_object);
+
+            if !(_arguments isequalto []) then {
+                { VISIT(_x) } foreach _arguments;
+            };
+        };
+        case "class_access": {
+            private _object = _node select 1;
+            private _member = _node select 2;
+
+            VISIT(_object);
+            VISIT(_member);
+        };
         case "if": {
             private _condition = _node select 1;
             private _trueBlock = _node select 2;
@@ -76,41 +163,6 @@ sqfpp_fnc_visitNode = {
             VISIT(_condition);
             VISIT(_cases);
         };
-        case "block": {
-            private _statementList = _node select 1;
-
-            { VISIT(_x) } foreach _statementList;
-        };
-        case "expression_statement": {
-            private _statement = _node select 1;
-
-            VISIT(_statement);
-        };
-        case "variable_definition": {
-            private _varIdentifierToken = _node select 1;
-
-            VISIT(_varIdentifierToken);
-        };
-        case "assignment": {
-            private _left = _node select 1;
-            private _operator = _node select 2;
-            private _right = _node select 3;
-
-            VISIT(_left);
-            VISIT(_right);
-        };
-        case "identifier": {
-
-        };
-        case "literal": {
-            // visit array literal elements?
-        };
-        case "unary_operation": {
-            private _operator = _node select 1;
-            private _right = _node select 2;
-
-            VISIT(_right);
-        };
         case "new_instance": {
             private _class = _node select 1;
             private _arguments = _node select 2;
@@ -134,45 +186,6 @@ sqfpp_fnc_visitNode = {
 
             VISIT(_class);
             { VISIT(_x) } foreach _arguments;
-        };
-        case "unary_statement": {
-            private _symbol = _node select 1;
-            private _right = _node select 2;
-
-            VISIT(_symbol);
-            VISIT(_right);
-        };
-        case "binary_operation": {
-            private _operator = _node select 1;
-            private _left = _node select 2;
-            private _right = _node select 3;
-
-            VISIT(_left);
-            VISIT(_right);
-        };
-        case "function_call": {
-            private _function = _node select 1;
-            private _arguments = _node select 2;
-
-            { VISIT(_x) } foreach _arguments;
-        };
-        case "method_call": {
-            private _object = _node select 1;
-            private _method = _node select 2;
-            private _arguments = _node select 3;
-
-            VISIT(_object);
-
-            if !(_arguments isequalto []) then {
-                { VISIT(_x) } foreach _arguments;
-            };
-        };
-        case "class_access": {
-            private _object = _node select 1;
-            private _member = _node select 2;
-
-            VISIT(_object);
-            VISIT(_member);
         };
         case "lambda": {
             private _parameterList = _node select 1;
@@ -386,6 +399,97 @@ sqfpp_fnc_transformClassSelfReferences = {
 };
 
 
+sqfpp_fnc_transformNamespaceAccess = {
+    private _tree = _this;
+
+    [_tree,[
+        ["namespace_block", {
+            params ["_node","_visitor","_state"];
+
+            if (_state == "leaving") then {
+                _node params ["_type","_namespace","_blockNodes"];
+
+                // sub namespace blocks will be turned into block nodes
+                // take the nodes from these blocks and merge them into this block
+
+                private _newNodes = [];
+                {
+                    private _isBlockNode = (_x select 0) == "block";
+
+                    if (_isBlockNode) then {
+                        _newNodes append (_x select 1);
+                    } else {
+                        _newNodes pushback _x;
+                    };
+                } foreach _blockNodes;
+                _blockNodes = _newNodes;
+
+                {
+                    private _nodeType = _x select 0;
+
+                    switch (_nodeType) do {
+                        case "expression_statement": {
+                            private _assignmentNode = _x select 1;
+                            private _varDefNode = _assignmentNode select 1;
+                            private _varDefToken = _varDefNode select 1;
+                            private _varDefName = _varDefToken select 1;
+
+                            private _newVarDefName = _namespace + "_" + _varDefName;
+                            _varDefToken set [1, _newVarDefName];
+                        };
+                        case "named_function": {
+                            private _functionName = _x select 1;
+                            private _newFunctionName = _namespace + "_" + _functionName;
+
+                            _x set [1, _newFunctionName];
+                        };
+                        case "class_definition": {
+                            private _className = _x select 1;
+                            private _newClassName = _namespace + "_" + _className;
+
+                            _x set [1, _newClassName];
+                        };
+                    };
+                } foreach _blockNodes;
+
+                _node set [0, "block"];
+                _node set [1, _blockNodes];
+                _node deleteat 2;
+            };
+        }],
+        ["namespace_accessor", {
+            params ["_node","_visitor","_state"];
+
+            if (_state == "leaving") then {
+                private _left = _node select 1;
+                private _right = _node select 2;
+
+                // merge left identifier into right node
+                // transform this node into the updated right node
+
+                private _namespace = _left select 1;
+                private _rightNodeType = _right select 0;
+                private _rightNodeText = _right select 1;
+
+                private _prefix = _namespace + "_";
+                if (_rightNodeType == "function_call") then {
+                    _prefix = _prefix + "fnc_";
+                };
+
+                private _newRightNodeName = _prefix + _rightNodeText;
+
+                _node set [0, _rightNodeType];
+                _node set [1, _newRightNodeName];
+
+                for "_i" from 2 to (count _right - 1) do {
+                    _node set [_i, _right select _i];
+                };
+            };
+        }]
+    ]] call sqfpp_fnc_transform;
+};
+
+
 sqfpp_fnc_transformContinuedLoops = {
     private _tree = _this;
 
@@ -532,7 +636,7 @@ sqfpp_fnc_transformClassMemberAccess = {
 
             if (_state != "leaving") exitwith {};
 
-            private _currentMethod = _visitor getvariable ["currentMethod",""];
+            private _currentMethod = _visitor getvariable "currentMethod";
             if (isnil "_currentMethod") exitwith {};
 
             private _functionName = _node select 1;

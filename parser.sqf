@@ -145,7 +145,7 @@ sqfpp_fnc_parserErrorUI = {
                     private _characters = _text splitstring "";
                     private _characterCount = count _characters;
 
-                    private _widthPerCharacter = safezoneW * 0.0037;
+                    private _widthPerCharacter = safezoneW * 0.00375;
                     private _lineWidth = _widthPerCharacter * _characterCount;
 
                     _lineWidth
@@ -252,6 +252,17 @@ sqfpp_fnc_createNode = {
             _properties params ["_identifierToken"];
 
             [_type, _identifierToken select 1]
+        };
+        case "namespace_accessor": {
+            _properties params ["_operator","_left","_right"];
+
+            private _typeLeft = _left select 0;
+            private _typeRight = _right select 0;
+
+            if !(_typeLeft in ["identifier","namespace_accessor"]) then { ["Namespace accessor left argument must be identifier"] call sqfpp_fnc_parseError; };
+            if !(_typeRight in ["identifier","function_call","namespace_accessor"]) then { ["Namespace accessor right argument must be identifier or function call"] call sqfpp_fnc_parseError; };
+
+            [_type,_left,_right]
         };
         case "if": {
             _properties params ["_condition","_trueBlock","_falseBlock"];
@@ -407,6 +418,13 @@ sqfpp_fnc_createNode = {
         case "empty_statement": {
             [_type]
         };
+        case "namespace_block": {
+            _properties params ["_name","_block"];
+
+            private _blockNodes = _block select 1;
+
+            [_type,_name,_blockNodes]
+        };
         default {
             ["Parser","Unkown Node Type Requested: %1", [_type]] call sqfpp_fnc_error;
         };
@@ -453,8 +471,10 @@ sqfpp_fnc_parse = {
 
         // transformations
 
-        _ast call sqfpp_fnc_precompileClasses;
+        _ast call sqfpp_fnc_transformNamespaceAccess;
         _ast call sqfpp_fnc_checkTreeValidity;
+
+        _ast call sqfpp_fnc_precompileClasses;
 
         _ast call sqfpp_fnc_transformContinuedLoops;
         _ast call sqfpp_fnc_transformClassMemberAccess;
@@ -471,6 +491,51 @@ sqfpp_fnc_parse = {
 
 
 
+sqfpp_fnc_parseNamespaceSpecifier = {
+    scopename "parseNamespaceSpecifier";
+
+    if (ACCEPT_SYM("namespace")) then {
+        CONSUME();
+
+        if (EXPECT_TYPE("identifier")) then {
+            private _namespace = CURR_TOKEN select 1;
+            CONSUME();
+
+            private _block = call sqfpp_fnc_parseBlock;
+
+            // verify block contains only valid node types
+
+            private _blockNodes = _block select 1;
+            {
+                private _nodeType = _x select 0;
+
+                private _valid = false;
+                switch (_nodeType) do {
+                    case "namespace_block";
+                    case "named_function";
+                    case "class_definition": { _valid = true };
+                    case "expression_statement": {
+                        private _leftNode = _x select 1;
+                        private _leftNodeType = _leftNode select 0;
+
+                        if (_leftNodeType == "assignment") then {
+                            _valid = true;
+                        };
+                    };
+                };
+
+                if (!_valid) then {
+                    [format ["Namespace block '%1' may only contain global variable definitions, named function definitions, or class definitions", _namespace]] call sqfpp_fnc_parseError;
+                };
+            } foreach _blockNodes;
+
+            private _namespaceNode = ["namespace_block", [_namespace,_block]] call sqfpp_fnc_createNode;
+            _namespaceNode breakout "parseNamespaceSpecifier";
+        };
+    };
+};
+
+
 sqfpp_fnc_parseNularStatements = {
     scopename "parseNularStatements";
 
@@ -485,7 +550,6 @@ sqfpp_fnc_parseNularStatements = {
             _nularNode breakout "parseNularStatements";
         };
     };
-
 };
 
 
@@ -1251,14 +1315,14 @@ sqfpp_fnc_parseBlock = {
     // parse raw sqf block
 
     private _rawSQF = false;
-    if (ACCEPT_TYPE("raw_sqf_indicator")) then {
+    if (ACCEPT_SYM("sqf")) then {
         _rawSQF = true;
         CONSUME();
 
         // grab all tokens except
         // opening and closing braces
 
-        if (EXPECT_SYM("{")) then {
+        if (ACCEPT_SYM("{")) then {
             CONSUME();
 
             private _sqfTokens = [];
@@ -1289,6 +1353,9 @@ sqfpp_fnc_parseBlock = {
 
             private _node = ["raw_sqf", [_sqfTokens]] call sqfpp_fnc_createNode;
             _node breakout "parseBlock";
+        } else {
+            BACKTRACK();
+            nil breakout "parseBlock";
         };
     };
 };
@@ -1362,6 +1429,9 @@ sqfpp_fnc_parseStatement = {
     };
 
     private "_node";
+
+    _node = call sqfpp_fnc_parseNamespaceSpecifier;
+    if (!isnil "_node") exitwith {_node};
 
     _node = call sqfpp_fnc_parseNularStatements;
     if (!isnil "_node") exitwith {_node};

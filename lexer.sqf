@@ -6,9 +6,9 @@ sqfpp_letters =
     ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
 
 sqfpp_digits = ["0","1","2","3","4","5","6","7","8","9"];
-sqfpp_separators = [ "," , "(" , ")" , "[", "]", "{" , "}" , ":" ];
+sqfpp_separators = [ "," , "(" , ")" , "[", "]", "{" , "}" ];
 
-sqfpp_operatorChars = [ "=",  "!" , "+" , "-" , "*" , "/" , "%" , ">" , "<" , ".", "&", "|" ];
+sqfpp_operatorChars = [ "=",  "!" , "+" , "-" , "*" , "/" , "%" , ">" , "<" , ".", "&", "|", ":" ];
 sqfpp_assignmentOperators = ["=","+=","-=","*=","/=","%="];
 
 sqfpp_identifierStartChars = sqfpp_letters + ["_"];
@@ -30,36 +30,37 @@ sqfpp_whitespace = " ";
 
 
 sqfpp_operatorInfoMap = [
-    [".",  9,"left", ["binary"]],
+    ["::", 10,"left", ["binary"]],
+    [".",   9,"left", ["binary"]],
 
-    ["!",  8,"right", ["unary"]],
+    ["!",   8,"right", ["unary"]],
 
-    ["*",  7,"left", ["binary"]],
-    ["/",  7,"left", ["binary"]],
-    ["%",  7,"left", ["binary"]],
+    ["*",   7,"left", ["binary"]],
+    ["/",   7,"left", ["binary"]],
+    ["%",   7,"left", ["binary"]],
 
-    ["+",  6,"left", ["binary"]],
-    ["-",  6,"left", ["binary","unary"]],
+    ["+",   6,"left", ["binary"]],
+    ["-",   6,"left", ["binary","unary"]],
 
-    ["<",  5,"left", ["binary"]],
-    [">",  5,"left", ["binary"]],
-    ["<=", 5,"left", ["binary"]],
-    [">=", 5,"left", ["binary"]],
+    ["<",   5,"left", ["binary"]],
+    [">",   5,"left", ["binary"]],
+    ["<=",  5,"left", ["binary"]],
+    [">=",  5,"left", ["binary"]],
 
-    ["==", 4,"left", ["binary"]],
-    ["!=", 4,"left", ["binary"]],
+    ["==",  4,"left", ["binary"]],
+    ["!=",  4,"left", ["binary"]],
 
-    ["&&", 3,"left", ["binary"]],
-    ["||", 3,"left", ["binary"]],
+    ["&&",  3,"left", ["binary"]],
+    ["||",  3,"left", ["binary"]],
 
-    ["=",  2,"right", ["binary","assignment"]],
-    ["+=", 2,"right", ["binary","assignment"]],
-    ["-=", 2,"right", ["binary","assignment"]],
-    ["*=", 2,"right", ["binary","assignment"]],
-    ["/=", 2,"right", ["binary","assignment"]],
-    ["%=", 2,"right", ["binary","assignment"]],
-    ["<<", 2,"right", ["binary"]],
-    [">>", 2,"right", ["binary"]],
+    ["=",   2,"right", ["binary","assignment"]],
+    ["+=",  2,"right", ["binary","assignment"]],
+    ["-=",  2,"right", ["binary","assignment"]],
+    ["*=",  2,"right", ["binary","assignment"]],
+    ["/=",  2,"right", ["binary","assignment"]],
+    ["%=",  2,"right", ["binary","assignment"]],
+    ["<<",  2,"right", ["binary"]],
+    [">>",  2,"right", ["binary"]],
 
     ["new",         1,"right", ["unary"]],
     ["delete",      1,"right", ["unary"]],
@@ -127,9 +128,6 @@ sqfpp_keywordMap = [
     ]],
     ["unary", [
         "return"
-    ]],
-    ["raw_sqf_indicator", [
-        "SQF"
     ]]
 ];
 
@@ -146,6 +144,7 @@ sqfpp_keywordModifiers = ["var"];
 
 
 sqfpp_tokenToNodeMap = [
+    ["::", "namespace_accessor"],
     [".",  "class_access"],
 
     ["=",  "assignment"],
