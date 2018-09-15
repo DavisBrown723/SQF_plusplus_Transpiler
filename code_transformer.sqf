@@ -21,16 +21,17 @@ sqfpp_fnc_visitNode = {
     private _nodeType = _node select 0;
 
     private _transformations = _visitor getvariable "sqfpp_transformations";
-    private "_matchedTransformation";
     {
         _x params ["_transformationType","_transformationCode"];
 
         if (_nodeType == _transformationType || _transformationType == "") then {
-            _matchedTransformation = _x;
-
             [_node,_visitor,"entered"] call _transformationCode;
         };
     } foreach _transformations;
+
+    // if node type was changed from "entered" transformation
+    // make sure we don't visit the wrong node
+    _nodeType = _node select 0;
 
     switch (_nodeType) do {
         case "identifier": {
@@ -251,16 +252,19 @@ sqfpp_fnc_visitNode = {
         case "break": {};
         case "continue": {};
         case "empty_statement": {};
+        case "no_statement": {};
         default {
             ["Code Transformer","Node does not support visit operation - %1", [_node]] call sqfpp_fnc_error;
         };
     };
 
-    if (!isnil "_matchedTransformation") then {
-        _matchedTransformation params ["_transformationType","_transformationCode"];
+    {
+        _x params ["_transformationType","_transformationCode"];
 
-        [_node,_visitor,"leaving"] call _transformationCode;
-    };
+        if (_nodeType == _transformationType || _transformationType == "") then {
+            [_node,_visitor,"leaving"] call _transformationCode;
+        };
+    } foreach _transformations;
 };
 
 
@@ -348,6 +352,136 @@ sqfpp_fnc_checkParentClassInits = {
     ]] call sqfpp_fnc_transform;
 };
 
+sqfpp_fnc_optimizeTree = {
+    private _tree = _this;
+
+    _tree call sqfpp_fnc_removeOneTimeUseVars;
+};
+
+sqfpp_fnc_removeOneTimeUseVars = {
+    private _tree = _this;
+
+    private _findVarUsageData = {
+        params ["_variablesByScope","_varName"];
+
+        scopename "findVarData";
+
+        {
+            private _varUsageByBlock = _x;
+
+            {
+                if (_varName == (_x select 0)) then {
+                    _x breakout "findVarData";
+                };
+            } foreach _varUsageByBlock;
+        } foreach _variablesByScope;
+    };
+
+    [_tree,[
+        ["block", {
+            params ["_node","_visitor","_state"];
+
+            private _inOptimizationPass = _visitor getvariable ["inOptimizationPass",false];
+
+            if (!_inOptimizationPass) then {
+                switch (_state) do {
+                    case "entered": {
+                        // store how many times a variable is used
+
+                        private _variablesByScope = _visitor getvariable "varsByScope";
+                        if (isnil "_variablesByScope") then { _variablesByScope = []; _visitor setvariable ["varsByScope", _variablesByScope] };
+
+                        _variablesByScope pushback [];
+                    };
+                    case "leaving": {
+                        private _variablesByScope = _visitor getvariable "varsByScope";
+
+                        // remove definitions of single-use definitions
+
+                        _visitor setvariable ["inOptimizationPass", true];
+                        // revisit child nodes to transform them
+                        private _statementList = _node select 1;
+                        { VISIT(_x) } foreach _statementList;
+                        _visitor setvariable ["inOptimizationPass", false];
+
+                        private _variablesByScope = _visitor getvariable "varsByScope";
+                        private _lastScopeIndex = (count _variablesByScope) - 1;
+                        _variablesByScope deleteat _lastScopeIndex;
+                    };
+                };
+            };
+        }],
+        ["assignment", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _varDefinitionNode = _node select 1;
+            private _right = _node select 3;
+
+            private _inOptimizationPass = _visitor getvariable ["inOptimizationPass",false];
+
+            if (!_inOptimizationPass) then {
+                // keep track of variable definition and assigned value
+
+                private _varToken = _varDefinitionNode select 1;
+                private _varName = _varToken select 1;
+                private _varProperties = _varDefinitionNode select 2;
+
+                if !("global" in _varProperties) then {
+                    private _variablesByScope = _visitor getvariable "varsByScope";
+                    private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
+                    _lowestScope pushback [_varName,-1,_right]; // start at -1 because var definition counts as one use too
+                };
+            } else {
+                private _varToken = _varDefinitionNode select 1;
+                private _varName = _varToken select 1;
+
+                private _variablesByScope = _visitor getvariable "varsByScope";
+
+                private _varUseData = [_variablesByScope,_varName] call _findVarUsageData;
+                private _timesVarUsed = _varUseData select 1;
+
+                // remove assignment statement if var only used once
+                if (_timesVarUsed == 1) then {
+                    _node set [0,"no_statement"];
+                    for "_i" from 1 to (count _node - 1) do {
+                        _node deleteat _i;
+                    };
+                };
+            };
+        }],
+        ["identifier", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "leaving") exitwith {};
+
+            private _varName = _node select 1;
+
+            private _variablesByScope = _visitor getvariable "varsByScope";
+            private _varUseData = [_variablesByScope,_varName] call _findVarUsageData;
+
+            if (!isnil "_varUseData") then {
+                private _inOptimizationPass = _visitor getvariable ["inOptimizationPass",false];
+                private _timesVarUsed = _varUseData select 1;
+
+                if (!_inOptimizationPass) then {
+                    _varUseData set [1, _timesVarUsed + 1];
+                } else {
+                    if (_timesVarUsed == 1) then {
+                        // substitute expression for variable
+
+                        private _expression = _varUseData select 2;
+                        {
+                            _node set [_foreachindex, _x];
+                        } foreach _expression;
+                    };
+                };
+            };
+        }]
+    ]] call sqfpp_fnc_transform;
+};
+
 
 // we can also abuse scope bleed here
 // any var defined in class_def will remain defined for the other two node types if valid
@@ -399,6 +533,80 @@ sqfpp_fnc_transformClassSelfReferences = {
 };
 
 
+sqfpp_fnc_transformLocalVariables = {
+    private _tree = _this;
+
+    [_tree,[
+        ["block", {
+            params ["_node","_visitor","_state"];
+
+            // keep track of variables by scope
+
+            switch (_state) do {
+                case "entered": {
+                    private _variablesByScope = _visitor getvariable "varsByScope";
+                    if (isnil "_variablesByScope") then { _variablesByScope = []; _visitor setvariable ["varsByScope", _variablesByScope] };
+
+                    _variablesByScope pushback [];
+                };
+                case "leaving": {
+                    private _variablesByScope = _visitor getvariable "varsByScope";
+                    private _lastScopeIndex = (count _variablesByScope) - 1;
+                    _variablesByScope deleteat _lastScopeIndex;
+                };
+            };
+        }],
+        ["variable_definition", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _varToken = _node select 1;
+            private _varName = _varToken select 1;
+            private _varProperties = _node select 2;
+
+            if ("global" in _varProperties) exitwith {};
+
+            private _variablesByScope = _visitor getvariable "varsByScope";
+            if (isnil "_variablesByScope") exitwith {};
+
+            private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
+            _lowestScope pushback _varName;
+        }],
+        ["named_function", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _variablesByScope = _visitor getvariable "varsByScope";
+            if (isnil "_variablesByScope") exitwith {};
+
+            private _parameterList = _node select 2;
+            private _definedVariables = _parameterList apply {_x select 2};
+
+            private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
+            _lowestScope append _definedVariables;
+        }],
+        ["identifier", {
+            params ["_node","_visitor","_state"];
+
+            if (_state != "entered") exitwith {};
+
+            private _varName = _node select 1;
+
+            private _variablesByScope = _visitor getvariable "varsByScope";
+            if (isnil "_variablesByScope") exitwith {};
+
+            private _varInScope = (_variablesByScope findif {_varName in _x}) != -1;
+            if (_varInScope) then {
+                private _localVarName = "_" + _varName;
+                _node set [1,_localVarName];
+            };
+        }]
+    ]] call sqfpp_fnc_transform;
+};
+
+
 sqfpp_fnc_transformNamespaceAccess = {
     private _tree = _this;
 
@@ -431,6 +639,14 @@ sqfpp_fnc_transformNamespaceAccess = {
                         case "expression_statement": {
                             private _assignmentNode = _x select 1;
                             private _varDefNode = _assignmentNode select 1;
+                            private _varDefToken = _varDefNode select 1;
+                            private _varDefName = _varDefToken select 1;
+
+                            private _newVarDefName = _namespace + "_" + _varDefName;
+                            _varDefToken set [1, _newVarDefName];
+                        };
+                        case "assignment": {
+                            private _varDefNode = _x select 1;
                             private _varDefToken = _varDefNode select 1;
                             private _varDefName = _varDefToken select 1;
 

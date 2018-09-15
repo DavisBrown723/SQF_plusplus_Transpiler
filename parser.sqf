@@ -295,11 +295,11 @@ sqfpp_fnc_createNode = {
             [_type, _statementList];
         };
         case "variable_definition": {
-            _properties params ["_varIdentifierToken"];
+            _properties params ["_varIdentifierToken",["_properties",[]]];
 
             private _varIdentifierNode = ["identifier", [_varIdentifierToken]] call sqfpp_fnc_createNode;
 
-            [_type, _varIdentifierNode]
+            [_type, _varIdentifierNode, _properties]
         };
         case "assignment": {
             _properties params ["_operator","_left","_right"];
@@ -471,8 +471,11 @@ sqfpp_fnc_parse = {
 
         // transformations
 
+        _ast call sqfpp_fnc_transformLocalVariables;
         _ast call sqfpp_fnc_transformNamespaceAccess;
+
         _ast call sqfpp_fnc_checkTreeValidity;
+        _ast call sqfpp_fnc_optimizeTree;
 
         _ast call sqfpp_fnc_precompileClasses;
 
@@ -511,6 +514,7 @@ sqfpp_fnc_parseNamespaceSpecifier = {
 
                 private _valid = false;
                 switch (_nodeType) do {
+                    case "assignment";
                     case "namespace_block";
                     case "named_function";
                     case "class_definition": { _valid = true };
@@ -1189,22 +1193,31 @@ sqfpp_fnc_parseUnaryOperation = {
 sqfpp_fnc_parseIdentifier = {
     scopename "parseIdentifier";
 
-    if (ACCEPT_SYM("var")) then {
-        CONSUME();
+    if (ACCEPT_TYPE("var_declaration_specifier") || { (CURR_TOKEN select 0) in sqfpp_varDeclarationModifiers }) then {
+        private _varDeclarationModifiers = [];
+        while { (CURR_TOKEN select 0) in sqfpp_varDeclarationModifiers } do {
+            private _modifier = CURR_TOKEN select 1;
+            CONSUME();
 
-        if (EXPECT_TYPE("identifier")) then {
+            _varDeclarationModifiers pushback _modifier;
+        };
+
+        if (ACCEPT_TYPE("var_declaration_specifier")) then {
+            CONSUME(); // consume var keyword
             private _identifierToken = CURR_TOKEN;
             CONSUME();
 
-            private _node = ["variable_definition", [_identifierToken]] call sqfpp_fnc_createNode;
+            private _node = ["variable_definition", [_identifierToken, _varDeclarationModifiers]] call sqfpp_fnc_createNode;
             _node breakout "parseIdentifier";
         };
-    };
 
-    if (ACCEPT_TYPE("identifier")) then {
-        private _node = ["identifier", [CURR_TOKEN]] call sqfpp_fnc_createNode;
-        CONSUME();
-        _node breakout "parseIdentifier";
+        ["Expected var keyword prior to variable definition"] call sqfpp_fnc_parseError;
+    } else {
+        if (ACCEPT_TYPE("identifier")) then {
+            private _node = ["identifier", [CURR_TOKEN]] call sqfpp_fnc_createNode;
+            CONSUME();
+            _node breakout "parseIdentifier";
+        };
     };
 };
 

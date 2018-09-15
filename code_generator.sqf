@@ -84,6 +84,9 @@ sqfpp_fnc_translateNode = {
         case "expression_statement": {
             private _expression = _node select 1;
 
+            private _expressionType = _expression select 0;
+            if (_expressionType == "no_statement") exitwith {};
+
             private _code = format ["%1;", _expression call sqfpp_fnc_translateNode];
 
             _code breakout "translateNode";

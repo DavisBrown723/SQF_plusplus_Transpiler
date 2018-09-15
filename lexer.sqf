@@ -139,9 +139,8 @@ sqfpp_fnc_findKeywordsByType = {
     };
 };
 
-sqfpp_keywordModifiers = ["var"];
-
-
+sqfpp_varDeclarationSpecifiers = ["var"];
+sqfpp_varDeclarationModifiers = ["global"];
 
 sqfpp_tokenToNodeMap = [
     ["::", "namespace_accessor"],
@@ -264,8 +263,8 @@ sqfpp_fnc_lexerNext = {
             _tokenType = (sqfpp_keywordMap select _identifierTypeIndex) select 0;
         };
 
-        if (_identifierLowercase in sqfpp_keywordModifiers) then {
-            _tokenType = "keyword_modifier";
+        if (_identifierLowercase in sqfpp_varDeclarationSpecifiers) then {
+            _tokenType = "var_declaration_specifier";
         };
 
         [_tokenType,_identifier, [_currLine,_currColumn]] breakout "token_categorization";
