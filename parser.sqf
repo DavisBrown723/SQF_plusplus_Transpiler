@@ -1193,9 +1193,9 @@ sqfpp_fnc_parseUnaryOperation = {
 sqfpp_fnc_parseIdentifier = {
     scopename "parseIdentifier";
 
-    if (ACCEPT_TYPE("var_declaration_specifier") || { (CURR_TOKEN select 0) in sqfpp_varDeclarationModifiers }) then {
+    if (ACCEPT_TYPE("var_declaration_specifier") || { (CURR_TOKEN select 1) in sqfpp_varDeclarationModifiers }) then {
         private _varDeclarationModifiers = [];
-        while { (CURR_TOKEN select 0) in sqfpp_varDeclarationModifiers } do {
+        while { (CURR_TOKEN select 1) in sqfpp_varDeclarationModifiers } do {
             private _modifier = CURR_TOKEN select 1;
             CONSUME();
 
@@ -1403,6 +1403,11 @@ sqfpp_fnc_parseFunctionParameters = {
             EXPECT_TYPE("identifier");
             private _parameterName = CURR_TOKEN select 1;
             CONSUME();
+
+            // all function parameters
+            // must be local
+
+            _parameterName = "_" + _parameterName;
 
             // parse optional default value
 

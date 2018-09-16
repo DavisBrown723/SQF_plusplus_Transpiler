@@ -388,25 +388,39 @@ sqfpp_fnc_removeOneTimeUseVars = {
                     case "entered": {
                         // store how many times a variable is used
 
-                        private _variablesByScope = _visitor getvariable "varsByScope";
-                        if (isnil "_variablesByScope") then { _variablesByScope = []; _visitor setvariable ["varsByScope", _variablesByScope] };
+                        private _varDefinitionsByScope = _visitor getvariable "varsByScope";
+                        if (isnil "_varDefinitionsByScope") then { _varDefinitionsByScope = []; _visitor setvariable ["varsByScope", _varDefinitionsByScope] };
 
-                        _variablesByScope pushback [];
+                        _varDefinitionsByScope pushback [];
                     };
                     case "leaving": {
-                        private _variablesByScope = _visitor getvariable "varsByScope";
-
                         // remove definitions of single-use definitions
 
-                        _visitor setvariable ["inOptimizationPass", true];
-                        // revisit child nodes to transform them
-                        private _statementList = _node select 1;
-                        { VISIT(_x) } foreach _statementList;
-                        _visitor setvariable ["inOptimizationPass", false];
+                        private _varDefinitionsByScope = _visitor getvariable "varsByScope";
+                        private _lastScopeIndex = (count _varDefinitionsByScope) - 1;
+                        private _lastScope = _varDefinitionsByScope select _lastScopeIndex;
 
-                        private _variablesByScope = _visitor getvariable "varsByScope";
-                        private _lastScopeIndex = (count _variablesByScope) - 1;
-                        _variablesByScope deleteat _lastScopeIndex;
+                        {
+                            private _referencesByDefinition = _x;
+                            _referencesByDefinition params ["_varName","_varIsGlobal","_definitionNode","_assignedValueNode","_references"];
+
+                            // remove first reference which is created during definition
+                            _references deleteat 0;
+
+                            if (!_varIsGlobal && { (count _references) == 1 }) then {
+                                // null out definition
+                                _definitionNode set [0,"no_statement"];
+                                for "_i" from 1 to (count _definitionNode - 1) do { _definitionNode deleteat _i };
+
+                                // replace only reference with the assigned value
+                                private _reference = _references select 0;
+                                { _reference set [_foreachindex, _x] } foreach _assignedValueNode;
+                            };
+                        } foreach _lastScope;
+
+                        // remove data for current block
+
+                        _varDefinitionsByScope deleteat _lastScopeIndex;
                     };
                 };
             };
@@ -419,64 +433,47 @@ sqfpp_fnc_removeOneTimeUseVars = {
             private _varDefinitionNode = _node select 1;
             private _right = _node select 3;
 
-            private _inOptimizationPass = _visitor getvariable ["inOptimizationPass",false];
+            // keep track of variable definition and assigned value
 
-            if (!_inOptimizationPass) then {
-                // keep track of variable definition and assigned value
+            private _varToken = _varDefinitionNode select 1;
+            private _varName = _varToken select 1;
+            private _varProperties = _varDefinitionNode select 2;
 
-                private _varToken = _varDefinitionNode select 1;
-                private _varName = _varToken select 1;
-                private _varProperties = _varDefinitionNode select 2;
+            private _varIsGlobal = "global" in _varProperties;
 
-                if !("global" in _varProperties) then {
-                    private _variablesByScope = _visitor getvariable "varsByScope";
-                    private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
-                    _lowestScope pushback [_varName,-1,_right]; // start at -1 because var definition counts as one use too
-                };
-            } else {
-                private _varToken = _varDefinitionNode select 1;
-                private _varName = _varToken select 1;
-
-                private _variablesByScope = _visitor getvariable "varsByScope";
-
-                private _varUseData = [_variablesByScope,_varName] call _findVarUsageData;
-                private _timesVarUsed = _varUseData select 1;
-
-                // remove assignment statement if var only used once
-                if (_timesVarUsed == 1) then {
-                    _node set [0,"no_statement"];
-                    for "_i" from 1 to (count _node - 1) do {
-                        _node deleteat _i;
-                    };
-                };
-            };
+            private _varDefinitionsByScope = _visitor getvariable "varsByScope";
+            private _lowestScope = _varDefinitionsByScope select ((count _varDefinitionsByScope) - 1);
+            _lowestScope pushback [_varName, _varIsGlobal, _node, _right, []];
         }],
         ["identifier", {
             params ["_node","_visitor","_state"];
 
-            if (_state != "leaving") exitwith {};
+            if (_state != "entered") exitwith {};
 
             private _varName = _node select 1;
 
-            private _variablesByScope = _visitor getvariable "varsByScope";
-            private _varUseData = [_variablesByScope,_varName] call _findVarUsageData;
+            private _varDefinitionsByScope = _visitor getvariable "varsByScope";
 
-            if (!isnil "_varUseData") then {
-                private _inOptimizationPass = _visitor getvariable ["inOptimizationPass",false];
-                private _timesVarUsed = _varUseData select 1;
+            scopename "referenceSearch";
+            private "_lastMatchingDefinition";
+            for "_i" from (count _varDefinitionsByScope - 1) to 0 do {
+                private _scopeDefinitions = _varDefinitionsByScope select _i;
 
-                if (!_inOptimizationPass) then {
-                    _varUseData set [1, _timesVarUsed + 1];
-                } else {
-                    if (_timesVarUsed == 1) then {
-                        // substitute expression for variable
-
-                        private _expression = _varUseData select 2;
-                        {
-                            _node set [_foreachindex, _x];
-                        } foreach _expression;
+                {
+                    if ((_x select 0) == _varName) then {
+                        _lastMatchingDefinition = _x;
+                        breakto "referenceSearch";
                     };
-                };
+                } foreach _scopeDefinitions;
+            };
+
+            // variables defined by function parameters etc
+            // will not have definitions
+            if (!isnil "_lastMatchingDefinitionReferences") then {
+
+                private _lastMatchingDefinitionReferences = _lastMatchingDefinition select 4;
+                _lastMatchingDefinitionReferences pushback _node;
+
             };
         }]
     ]] call sqfpp_fnc_transform;
@@ -556,22 +553,30 @@ sqfpp_fnc_transformLocalVariables = {
                 };
             };
         }],
-        ["variable_definition", {
+        ["assignment", {
             params ["_node","_visitor","_state"];
 
-            if (_state != "entered") exitwith {};
+            if (_state != "leaving") exitwith {};
 
-            private _varToken = _node select 1;
-            private _varName = _varToken select 1;
-            private _varProperties = _node select 2;
+            private _left = _node select 1;
+            private _leftType = _left select 0;
 
-            if ("global" in _varProperties) exitwith {};
+            if (_leftType == "variable_definition") then {
+                // keep track of variable definition and assigned value
 
-            private _variablesByScope = _visitor getvariable "varsByScope";
-            if (isnil "_variablesByScope") exitwith {};
+                private _varToken = _left select 1;
+                private _varName = _varToken select 1;
+                private _varProperties = _left select 2;
 
-            private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
-            _lowestScope pushback _varName;
+                if ("global" in _varProperties) exitwith {};
+
+                private _variablesByScope = _visitor getvariable "varsByScope";
+
+                private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
+                _lowestScope pushback _varName;
+
+                _varToken set [1, "_" + _varName];
+            };
         }],
         ["named_function", {
             params ["_node","_visitor","_state"];
@@ -579,10 +584,18 @@ sqfpp_fnc_transformLocalVariables = {
             if (_state != "entered") exitwith {};
 
             private _variablesByScope = _visitor getvariable "varsByScope";
-            if (isnil "_variablesByScope") exitwith {};
 
             private _parameterList = _node select 2;
-            private _definedVariables = _parameterList apply {_x select 2};
+            private _definedVariables = _parameterList apply {
+                private _varName = _x select 2;
+                private _varNameLength = count _varName;
+
+                // remove leading underscore added during parsing
+                // otherwise references to var won't match
+                _varName select [1,_varNameLength - 1];
+            };
+
+            copyToClipboard str _definedVariables;
 
             private _lowestScope = _variablesByScope select ((count _variablesByScope) - 1);
             _lowestScope append _definedVariables;
@@ -595,7 +608,6 @@ sqfpp_fnc_transformLocalVariables = {
             private _varName = _node select 1;
 
             private _variablesByScope = _visitor getvariable "varsByScope";
-            if (isnil "_variablesByScope") exitwith {};
 
             private _varInScope = (_variablesByScope findif {_varName in _x}) != -1;
             if (_varInScope) then {
@@ -911,85 +923,3 @@ sqfpp_fnc_transformClassMemberAccess = {
         }]
     ]] call sqfpp_fnc_transform;
 };
-
-/*
-
-["block",[
-    ["expression_statement",
-        ["method_call",
-            ["identifier","this",[]],
-            "varname",
-            []
-        ]
-    ]
-]]
-
-["block",[
-    ["expression_statement",
-        ["assignment",
-            ["identifier","_x","var"],
-            "=",
-            ["class_access",
-                ["identifier","this",[]],
-                ["identifier","varname",[]]
-            ]
-        ]
-    ]
-]]
-
-*/
-
-
-
-
-/*
-sqfpp_fnc_transformContinueStatements = {
-    private _tree = _this;
-
-    [_tree,[
-        ["block", {
-            params ["_node","_visitor","_state"];
-
-            if (_state == "entered") then {
-                private _blockStatements = _node select 1;
-
-                private _i = 0;
-                private _blockStatementsCount = count _blockStatements;
-
-                while {_i < _blockStatementsCount} do {
-                    private _outerStatement = _blockStatements select _i;
-                    private _outerStatementType = _outerStatement select 0;
-
-                    if (_outerStatementType == "if") then {
-                        private _trueBlock = _outerStatement select 2;
-                        private _trueBlockStatements = _trueBlock select 1;
-
-                        private _innerStatement = _trueBlockStatements select 0;
-                        private _innerStatementType = _innerStatement select 0;
-
-                        if (_innerStatementType == "continue") then {
-                            // negate condition
-                            // surround all remaining statements from the outer block
-
-                            private _condition = _outerStatement select 1;
-                            private _negatedCondition = ["unary_operation", ["!", _condition]] call sqfpp_fnc_createNode;
-
-                            private _countRemainingStatements = _blockStatementsCount - _i;
-                            private _statementsToSurround = _blockStatements select [_i + 1, _countRemainingStatements];
-                            _blockStatements deleterange [_i + 1, _countRemainingStatements];
-                            _blockStatementsCount = _i;
-
-                            private _surroundedStatements = ["block", [_statementsToSurround]] call sqfpp_fnc_createNode;
-
-                            _outerStatement set [1,_negatedCondition];
-                            _outerStatement set [2,_surroundedStatements];
-                        };
-                    };
-
-                    _i = _i + 1;
-                };
-            };
-        }]
-    ]] call sqfpp_fnc_transform;
-};
-*/
